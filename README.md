@@ -1,5 +1,7 @@
 <div align="center">
 
+<img src="docs/branding/peekjet.png" alt="PeekJet" width="88" height="88">
+
 # PeekJet · 闪览
 
 **一眼看见，一点切换。**
@@ -20,7 +22,7 @@
 
 ## 简介
 
-打开多个 VS Code 项目后，不用反复切换窗口来找项目。PeekJet 将窗口内容缩成一组实时预览，停稳 **250 毫秒**后即可点击切换；闲置时半透明、鼠标穿透，输入时自动淡出避让。
+打开多个 VS Code 项目后，不用反复切换窗口来找项目。PeekJet 将窗口内容缩成一组实时预览，默认停稳 **150 毫秒**后即可点击切换；闲置时半透明、鼠标穿透，输入时自动淡出避让。
 
 - **原生实时预览**：使用 Windows DWM，支持 VS Code 和 Insiders。
 - **四边停靠与拖拽**：默认顶部，上下横排、左右竖排，拖拽后吸附最近边缘。
@@ -49,7 +51,7 @@
 
 | 操作 | 效果 |
 | --- | --- |
-| 鼠标停稳 250 毫秒 | 面板渐亮，开启点击选择 |
+| 鼠标停稳 150 毫秒（默认） | 面板渐亮，开启点击选择 |
 | 点击项目预览 | 切换到对应 VS Code 窗口 |
 | 激活后拖动预览或顶部空白处 | 移动面板，松开吸附最近边缘 |
 | 激活后滚轮或点击箭头 | 窗口较多时翻页 |
@@ -58,7 +60,9 @@
 | 激活后右键面板 | 打开同一套设置菜单 |
 | `Ctrl + Alt + V` / 单击托盘图标 | 显示、隐藏或唤回预览 |
 
-面板仅保留预览和项目名，完整窗口标题在悬停时显示；翻页用小圆点标识，箭头和右上角隐藏横线仅在激活后出现。主题、停靠边缘、大小、显示器和输入避让均在右键菜单中调整。
+面板最左侧竖排显示 PeekJet，预览下方保留项目名，完整窗口标题在悬停时显示；最右侧按钮可一键最小化全部 VS Code 窗口（包括其他预览页），面板继续显示，点击预览即可恢复窗口。翻页用小圆点标识，翻页箭头在激活后出现。主题、停靠边缘、大小、显示器和输入避让均在右键菜单中调整。
+
+右键菜单 → **悬停激活时间**可切换 100、150、200、250、350、500、1000 ms；也可在自定义项输入 **50–2000 ms**。选择即时生效并自动保存，重启后保留。
 
 多个窗口时点击切换不会隐藏面板；只剩一个或全部关闭时自动隐藏，重新打开多个窗口后恢复。手动隐藏会保留到下一次主动显示。重复启动只会唤回现有实例。
 
@@ -90,6 +94,8 @@ powershell -NoProfile -ExecutionPolicy Bypass -File .\build.ps1
 
 产物为 `dist/PeekJet.exe`。脚本使用 Windows 自带的 .NET Framework 编译器，不下载 SDK 或 NuGet 包。也可用 Visual Studio 打开 `PeekJet.csproj`，需要 .NET Framework 4.8 目标包。
 
+默认构建优先以 32 位进程运行，以减少基础内存开销，仍可预览 64 位 VS Code。如需 64 位构建，可使用 `powershell -NoProfile -ExecutionPolicy Bypass -File .\build.ps1 -Platform x64`。
+
 ```powershell
 # 生成便携包和源码包
 powershell -NoProfile -ExecutionPolicy Bypass -File .\package.ps1 -SkipBuild
@@ -104,6 +110,7 @@ Get-Content .\dist\theme-test.log
 | `--self-test-themes` | 离屏渲染、对比度、系统模式与状态保持；用于 Windows CI |
 | `--self-test` | 完整桌面交互检查，需要解锁桌面 |
 | `--self-test-avoidance` | 避让状态检查，跳过真实键盘与屏幕像素检查 |
+| `--self-test-controls` | 双屏四边布局、跨页最小化、缩略图复用和按需重绘检查 |
 | `--render-themes` | 重新生成示例主题图 |
 
 完整检查会短暂打开测试窗口，并向测试窗口发送 F24，不输入文本或终端命令。GitHub Actions 自动编译、执行主题检查并生成构建附件。

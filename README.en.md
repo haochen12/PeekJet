@@ -1,5 +1,7 @@
 <div align="center">
 
+<img src="docs/branding/peekjet.png" alt="PeekJet" width="88" height="88">
+
 # PeekJet
 
 **Your workspaces, one glance away.**
@@ -23,7 +25,7 @@ A lightweight, themeable live window preview dock for VS Code on Windows.
 - Native DWM live previews for VS Code and Insiders, with workspace-name labels.
 - Four-edge docking, drag-to-snap, multiple monitors and per-monitor DPI.
 - Midnight, Paper, Ocean, Ember and Windows system appearance.
-- A 250 ms gradual hover activation and translucent mouse click-through while idle.
+- Gradual hover activation (150 ms by default, configurable) and translucent mouse click-through while idle.
 - Typing avoidance that respects your selected dock edge.
 - A portable executable with no account, extension or network dependency.
 
@@ -41,7 +43,7 @@ The release also includes a source archive and `SHA256SUMS.txt`. To uninstall, q
 
 | Action | Result |
 | --- | --- |
-| Hover steadily for 250 ms | Gradually brighten and enable selection |
+| Hover steadily for 150 ms (default) | Gradually brighten and enable selection |
 | Click a workspace preview | Switch to that VS Code window |
 | Drag an activated preview or header | Move and snap to the nearest edge |
 | Use the wheel or arrows while active | Change pages |
@@ -49,9 +51,11 @@ The release also includes a source archive and `SHA256SUMS.txt`. To uninstall, q
 | Right-click the tray or an activated dock | Open settings |
 | `Ctrl + Alt + V` or a tray click | Toggle visibility or recall an avoided dock |
 
-The compact dock keeps previews and project names, with full window titles available on hover. Dots indicate pages; arrows and the top-right hide button appear only while activated. Use the context menu for appearance, size, screen, dock edge and typing avoidance; use the tray menu to quit.
+PeekJet appears vertically at the left, with previews and project names in the center. The far-right button minimizes all tracked VS Code windows across pages; the dock stays visible, and clicking a preview restores its window. Full window titles appear on hover. Dots indicate pages, and navigation arrows appear while activated. Use the context menu for appearance, size, screen, dock edge and typing avoidance; use the tray menu to quit.
 
 Switching workspaces keeps the dock visible. It hides when only zero or one window remains and returns when multiple windows are available. An explicit manual hide is respected until you recall it.
+
+Choose **悬停激活时间** in the context menu for 100, 150, 200, 250, 350, 500 or 1000 ms, or enter a custom value from **50 to 2000 ms**. Changes apply immediately and persist across restarts.
 
 ### Personalization
 
@@ -74,11 +78,14 @@ powershell -NoProfile -ExecutionPolicy Bypass -File .\package.ps1 -SkipBuild
 
 Output: `dist/PeekJet.exe`. The build uses the .NET Framework compiler included with Windows and downloads no SDK or NuGet packages. The Visual Studio project requires the .NET Framework 4.8 targeting pack.
 
+The default build prefers a 32-bit process to reduce memory overhead and can still preview 64-bit VS Code windows. For a 64-bit build, use `powershell -NoProfile -ExecutionPolicy Bypass -File .\build.ps1 -Platform x64`.
+
 | Developer option | Purpose |
 | --- | --- |
 | `--self-test-themes` | Offscreen rendering, contrast and theme state checks; used in Windows CI |
 | `--self-test` | Interactive integration checks on an unlocked desktop |
 | `--self-test-avoidance` | Avoidance state checks without real keyboard or screenshot checks |
+| `--self-test-controls` | Multi-monitor edge layouts, minimize-all, thumbnail reuse and change-driven rendering |
 | `--render-themes` | Regenerate the synthetic theme gallery |
 
 Full checks briefly open test windows and send F24 to a test window without entering text or commands. See [CONTRIBUTING.md](CONTRIBUTING.md) for the workflow and theme contributions.

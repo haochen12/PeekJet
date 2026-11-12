@@ -12,6 +12,161 @@ namespace PeekJet
 {
     internal static class SelfTest
     {
+        internal static int RunControls()
+        {
+            var results = new List<string>();
+            var sources = new List<Form>();
+            try
+            {
+                results.Add("INFO: Process architecture " + (IntPtr.Size * 8) + "-bit");
+                TestEdges(results);
+                for (int i = 0; i < 7; i++)
+                {
+                    var source = new Form { Text = "Minimize test " + i, ShowInTaskbar = false };
+                    sources.Add(source); source.Show();
+                }
+                using (var unrelated = new Form { Text = "Unrelated app", ShowInTaskbar = false })
+                using (var dock = new PreviewDock(null, true))
+                {
+                    unrelated.Show(); dock.Show(); Application.DoEvents();
+                    var windows = sources.Select(f => new CodeWindow { Handle = f.Handle, Title = f.Text }).ToList();
+                    dock.RefreshWindows(windows, sources[0].Handle);
+                    Check(dock.Tiles.Count < sources.Count, "Minimize test includes windows outside the current page", results);
+                    var thumbnailHandles = dock.Tiles.ToDictionary(t => t.Window.Handle, t => t.Thumbnail);
+                    dock.SelectPreviewSize(80);
+                    Check(dock.Tiles.All(t => thumbnailHandles.ContainsKey(t.Window.Handle) && thumbnailHandles[t.Window.Handle] == t.Thumbnail),
+                        "Resizing reuses existing DWM thumbnail handles", results);
+                    dock.Update();
+                    int invalidations = 0;
+                    dock.Invalidated += delegate { invalidations++; };
+                    dock.RefreshWindows(windows.Select(w => new CodeWindow { Handle = w.Handle, Title = w.Title }).ToList(), sources[0].Handle);
+                    Check(invalidations == 0, "Unchanged scan does not repaint the dock", results);
+                    var changedWindows = windows.Select(w => new CodeWindow { Handle = w.Handle, Title = w.Title }).ToList();
+                    changedWindows[0].Title = "new.cs - changed-project - Visual Studio Code";
+                    dock.RefreshWindows(changedWindows, sources[0].Handle);
+                    Check(invalidations > 0 && dock.Tiles[0].Window.ProjectName == "changed-project", "Changed titles still update project labels", results);
+                    dock.MinimizeAllWindows(); Pump();
+                    Check(sources.All(f => Native.IsIconic(f.Handle)), "One action minimizes all tracked windows across pages", results);
+                    Check(!Native.IsIconic(unrelated.Handle), "Minimize action leaves unrelated windows alone", results);
+                    foreach (var window in windows) window.Minimized = Native.IsIconic(window.Handle);
+                    dock.RefreshWindows(windows, IntPtr.Zero);
+                    Check(dock.Visible && dock.Tiles.Count > 0, "Dock remains visible after minimizing editors", results);
+                    dock.MinimizeAllWindows(); Pump();
+                    Check(sources.All(f => Native.IsIconic(f.Handle)), "Repeated minimize preserves minimized windows", results);
+                    Native.ShowWindowAsync(sources[0].Handle, 9); Pump();
+                    Check(!Native.IsIconic(sources[0].Handle), "Minimized editors can be restored", results);
+                }
+                var actualWindows = Windows.Find();
+                if (actualWindows.Count >= 2)
+                {
+                    using (var actualDock = new PreviewDock(null, true))
+                    {
+                        actualDock.Show();
+                        actualDock.RefreshWindows(actualWindows, Native.GetForegroundWindow());
+                        Check(actualDock.Tiles.Count > 0 && actualDock.Tiles.All(t => t.Thumbnail != IntPtr.Zero && t.LastError == 0 && t.SourceSize.Width > 0 && t.SourceSize.Height > 0),
+                            "Real VS Code discovery and DWM interop: " + actualWindows.Count + " windows", results);
+                    }
+                }
+                else results.Add("SKIP: real VS Code DWM interop requires at least two editor windows");
+                TestDwellProgress(results);
+                return 0;
+            }
+            catch (Exception error) { results.Add("FAIL: " + error); return 1; }
+            finally
+            {
+                foreach (var source in sources) source.Dispose();
+                File.WriteAllText(Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "controls-test.log"), string.Join(Environment.NewLine, results), Encoding.UTF8);
+            }
+        }
+
+        private static void TestDwellProgress(List<string> results)
+        {
+            using (var first = new Form { Text = "Dwell A", ShowInTaskbar = false })
+            using (var second = new Form { Text = "Dwell B", ShowInTaskbar = false })
+            using (var dock = new PreviewDock(null, true))
+            {
+                first.Show(); second.Show(); dock.Show();
+                Check(dock.HoverDelayMilliseconds == 150, "Hover activation defaults to 150 ms", results);
+                dock.SelectHoverDelay(250);
+                dock.SelectDisplay(Screen.PrimaryScreen.DeviceName);
+                dock.RefreshWindows(new List<CodeWindow> {
+                    new CodeWindow { Handle = first.Handle, Title = first.Text },
+                    new CodeWindow { Handle = second.Handle, Title = second.Text }
+                }, first.Handle);
+                var tile = dock.Tiles[0];
+                var point = dock.PointToScreen(new Point(tile.Preview.Left + tile.Preview.Width / 2, tile.Preview.Top + tile.Preview.Height / 2));
+                var outside = new Point(-30000, -30000);
+                int jitter, movement;
+                using (var graphics = dock.CreateGraphics())
+                { jitter = (int)Math.Round(9 * graphics.DpiX / 96f); movement = (int)Math.Round(20 * graphics.DpiX / 96f); }
+                int invalidations = 0;
+                Rectangle lastInvalid = Rectangle.Empty;
+                dock.Invalidated += delegate(object sender, InvalidateEventArgs e) { invalidations++; lastInvalid = e.InvalidRect; };
+                dock.UpdatePointer(point, false, 0);
+                dock.UpdatePointer(point, false, 30);
+                Check(dock.DwellProgress == 0 && !dock.SelectionEnabled, "Short pointer crossings do not flash a progress line", results);
+                dock.UpdatePointer(point, false, 60);
+                double previousProgress = dock.DwellProgress, previousOpacity = dock.Opacity;
+                dock.UpdatePointer(new Point(point.X + jitter, point.Y), false, 125);
+                Check(dock.DwellProgress > previousProgress && dock.Opacity > previousOpacity,
+                    "Small pointer jitter does not roll progress or brightness back", results);
+                Check(!lastInvalid.IsEmpty && lastInvalid.Top > dock.Height / 2,
+                    "Dwell animation invalidates the footer instead of every preview card", results);
+                dock.UpdatePointer(point, false, 249);
+                Check(!dock.SelectionEnabled, "Progress changes preserve the 250 ms selection threshold", results);
+                dock.UpdatePointer(point, false, 250);
+                Check(dock.SelectionEnabled && dock.DwellProgress == 0, "Completion enables selection and clears the progress line", results);
+
+                dock.UpdatePointer(outside, false, 1000);
+                dock.UpdatePointer(point, false, 2000);
+                dock.UpdatePointer(point, false, 2125);
+                int beforeCancel = invalidations;
+                dock.UpdatePointer(outside, false, 2130);
+                Check(dock.DwellProgress == 0 && invalidations > beforeCancel && Math.Abs(dock.Opacity - 0.58) < 0.01,
+                    "Leaving midway invalidates and erases the old line immediately", results);
+
+                dock.UpdatePointer(point, false, 3000);
+                dock.UpdatePointer(point, false, 3125);
+                beforeCancel = invalidations;
+                dock.UpdatePointer(point, true, 3130);
+                Check(dock.DwellProgress == 0 && invalidations > beforeCancel && !dock.SelectionEnabled && (Native.ExtendedStyle(dock.Handle) & 0x20) != 0,
+                    "Held-button cancellation erases progress and keeps click-through", results);
+
+                dock.UpdatePointer(point, false, 4000);
+                dock.UpdatePointer(point, false, 4125);
+                var moved = new Point(point.X + movement, point.Y);
+                dock.UpdatePointer(moved, false, 4130);
+                dock.UpdatePointer(moved, false, 4160);
+                Check(dock.DwellProgress == 0 && !dock.SelectionEnabled, "Significant movement resets dwell without a short progress flash", results);
+                dock.UpdatePointer(moved, false, 4379);
+                Check(!dock.SelectionEnabled, "Movement starts a fresh full dwell interval", results);
+                dock.UpdatePointer(moved, false, 4380);
+                Check(dock.SelectionEnabled, "Selection recovers after settling at the new position", results);
+                long started = 10000;
+                foreach (int delay in new[] { 50, 100, 150, 175, 250, 500, 1000, 2000 })
+                {
+                    dock.SelectHoverDelay(delay);
+                    dock.UpdatePointer(point, false, started);
+                    dock.UpdatePointer(point, false, started + delay / 2);
+                    Check(dock.DwellProgress > 0 && dock.DwellProgress < 1 && dock.Opacity > 0.58 && dock.Opacity < 0.97,
+                        "Configured delay keeps progressive brightness and progress: " + delay + " ms", results);
+                    dock.UpdatePointer(point, false, started + delay - 1);
+                    Check(!dock.SelectionEnabled && (Native.ExtendedStyle(dock.Handle) & 0x20) != 0,
+                        "Configured delay stays click-through until due: " + delay + " ms", results);
+                    dock.UpdatePointer(point, false, started + delay);
+                    Check(dock.SelectionEnabled && (Native.ExtendedStyle(dock.Handle) & 0x20) == 0,
+                        "Configured delay enables selection when due: " + delay + " ms", results);
+                    started += 3000;
+                }
+                dock.SelectHoverDelay(500);
+                dock.UpdatePointer(point, false, started);
+                dock.UpdatePointer(point, false, started + 300);
+                dock.SelectHoverDelay(100);
+                Check(!dock.SelectionEnabled && dock.DwellProgress == 0 && Math.Abs(dock.Opacity - 0.58) < 0.01,
+                    "Changing delay clears an in-progress dwell instead of immediately arming", results);
+            }
+        }
+
         internal static int RunThemes()
         {
             var results = new List<string>();
@@ -150,6 +305,7 @@ namespace PeekJet
             using (var below = new Form { Text = "Click-through receiver", StartPosition = FormStartPosition.Manual, FormBorderStyle = FormBorderStyle.None, BackColor = Color.White, ShowInTaskbar = false, TopMost = true })
             using (var dock = new PreviewDock(null, true))
             {
+                dock.SelectHoverDelay(250);
                 target.Show(); below.Show(); dock.Show(); Application.DoEvents();
                 dock.SelectDisplay(screen.DeviceName);
                 var sources = new List<CodeWindow> {

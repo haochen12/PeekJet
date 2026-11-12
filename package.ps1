@@ -14,7 +14,7 @@ $portable = Join-Path $PSScriptRoot "PeekJet-v$version-windows.zip"
 Compress-Archive -LiteralPath $portableFiles -DestinationPath $portable -Force
 $sourceNames = @('Program.cs', 'Native.cs', 'Themes.cs', 'SelfTest.cs', 'ThemeGallery.cs', 'AssemblyInfo.cs',
     'PeekJet.csproj', 'app.manifest', 'app.ico', 'build.ps1', 'package.ps1', 'README.md', 'README.en.md',
-    'CONTRIBUTING.md', 'CHANGELOG.md', 'LICENSE', '.gitignore', '.github', 'docs')
+    'CONTRIBUTING.md', 'CHANGELOG.md', 'LICENSE', '.gitignore', '.github', 'docs', 'tools')
 $sourcePaths = @($sourceNames | ForEach-Object { Join-Path $PSScriptRoot $_ })
 # Explicit allowlist: no binaries, user settings, logs, or neighboring workspace files.
 $source = Join-Path $PSScriptRoot "PeekJet-v$version-source.zip"

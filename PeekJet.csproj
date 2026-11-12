@@ -8,6 +8,7 @@
     <RootNamespace>PeekJet</RootNamespace>
     <AssemblyName>PeekJet</AssemblyName>
     <TargetFrameworkVersion>v4.8</TargetFrameworkVersion>
+    <Prefer32Bit>true</Prefer32Bit>
     <LangVersion>5</LangVersion>
     <ApplicationManifest>app.manifest</ApplicationManifest>
     <ApplicationIcon>app.ico</ApplicationIcon>
@@ -26,7 +27,9 @@
     <Compile Include="ThemeGallery.cs" />
     <Compile Include="AssemblyInfo.cs" />
     <None Include="app.manifest" />
-    <None Include="app.ico" />
+    <EmbeddedResource Include="app.ico">
+      <LogicalName>PeekJet.AppIcon</LogicalName>
+    </EmbeddedResource>
   </ItemGroup>
   <Import Project="$(MSBuildToolsPath)\Microsoft.CSharp.targets" />
 </Project>

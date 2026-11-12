@@ -36,6 +36,9 @@ namespace PeekJet
         [DllImport("user32.dll")] internal static extern bool UnhookWindowsHookEx(IntPtr hook);
         [DllImport("user32.dll")] internal static extern IntPtr CallNextHookEx(IntPtr hook, int code, IntPtr message, IntPtr data);
         [DllImport("kernel32.dll", CharSet = CharSet.Unicode)] internal static extern IntPtr GetModuleHandle(string name);
+        [DllImport("kernel32.dll", SetLastError = true)] internal static extern IntPtr OpenProcess(uint access, bool inherit, uint processId);
+        [DllImport("kernel32.dll", CharSet = CharSet.Unicode, SetLastError = true)] internal static extern bool QueryFullProcessImageName(IntPtr process, uint flags, StringBuilder path, ref uint size);
+        [DllImport("kernel32.dll")] internal static extern bool CloseHandle(IntPtr handle);
         [DllImport("user32.dll")] internal static extern void keybd_event(byte key, byte scan, uint flags, UIntPtr extra);
         [DllImport("user32.dll")] internal static extern bool ShowWindowAsync(IntPtr hwnd, int command);
         [DllImport("user32.dll")] internal static extern bool SetForegroundWindow(IntPtr hwnd);

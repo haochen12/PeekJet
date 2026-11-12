@@ -1,4 +1,8 @@
-param([string]$OutputDirectory = (Join-Path $PSScriptRoot 'dist'))
+param(
+    [string]$OutputDirectory = (Join-Path $PSScriptRoot 'dist'),
+    [ValidateSet('anycpu32bitpreferred', 'anycpu', 'x86', 'x64')]
+    [string]$Platform = 'anycpu32bitpreferred'
+)
 $ErrorActionPreference = 'Stop'
 $compiler = Join-Path $env:WINDIR 'Microsoft.NET\Framework64\v4.0.30319\csc.exe'
 if (-not (Test-Path -LiteralPath $compiler)) {
@@ -7,9 +11,9 @@ if (-not (Test-Path -LiteralPath $compiler)) {
 $output = $OutputDirectory
 New-Item -ItemType Directory -Path $output -Force | Out-Null
 $sources = @(Get-ChildItem -LiteralPath $PSScriptRoot -Filter '*.cs' | ForEach-Object FullName)
-& $compiler /nologo /target:winexe /platform:anycpu /optimize+ /utf8output /codepage:65001 `
+& $compiler /nologo /target:winexe "/platform:$Platform" /optimize+ /utf8output /codepage:65001 `
     /reference:System.dll /reference:System.Core.dll /reference:System.Drawing.dll /reference:System.Windows.Forms.dll `
-    "/win32manifest:$PSScriptRoot\app.manifest" "/win32icon:$PSScriptRoot\app.ico" "/out:$output\PeekJet.exe" `
+    "/win32manifest:$PSScriptRoot\app.manifest" "/win32icon:$PSScriptRoot\app.ico" "/resource:$PSScriptRoot\app.ico,PeekJet.AppIcon" "/out:$output\PeekJet.exe" `
     $sources
 if ($LASTEXITCODE -ne 0) { throw 'Build failed.' }
 Write-Host "Built: $output\PeekJet.exe"
