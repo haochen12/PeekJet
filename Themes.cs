@@ -72,7 +72,11 @@ namespace PeekJet
         internal static void Stroke(Graphics graphics, Rectangle bounds, int radius, Color color, float width)
         {
             using (var path = Rounded(bounds, radius))
-            using (var pen = new Pen(color, width)) graphics.DrawPath(pen, path);
+            using (var pen = new Pen(color, width))
+            {
+                pen.Alignment = PenAlignment.Inset;
+                graphics.DrawPath(pen, path);
+            }
         }
     }
 

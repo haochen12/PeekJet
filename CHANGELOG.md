@@ -1,5 +1,11 @@
 # Changelog
 
+## Unreleased
+
+- Clean up the upper-left header decoration and unify rounded window/border geometry.
+- Remove the settings button from the dock; settings remain in the tray and dock context menus.
+- Reorganize Chinese and English READMEs with release downloads, usage, build, privacy and contribution sections.
+
 ## 0.1.0 — 2026-11-12
 
 First public release of **PeekJet · 闪览**.

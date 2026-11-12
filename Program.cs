@@ -188,7 +188,7 @@ namespace PeekJet
         private Rectangle layoutWorkArea;
         private IntPtr followedWindow;
         private float scale = 1f;
-        private Rectangle previousButton, nextButton, settingsButton, hideButton;
+        private Rectangle previousButton, nextButton, hideButton;
         private ToolTip tooltip = new ToolTip();
         private string status = "";
         private DateTime statusUntil;
@@ -245,7 +245,9 @@ namespace PeekJet
         {
             base.OnHandleCreated(e);
             if (!testing) hotkeyRegistered = Native.RegisterHotKey(Handle, 1, 0x4003, (uint)Keys.V);
-            int corners = 2;
+            // The explicit window region owns the corner shape. Do not apply a second,
+            // differently sized DWM rounding pass to the same layered window.
+            int corners = 1;
             Native.DwmSetWindowAttribute(Handle, 33, ref corners, 4);
             int dark = palette == null || !palette.Light ? 1 : 0;
             Native.DwmSetWindowAttribute(Handle, 20, ref dark, 4);
@@ -498,9 +500,8 @@ namespace PeekJet
             ClientSize = vertical ? new Size(margin * 2 + width, headerHeight + count * tileHeight + Math.Max(0, count - 1) * gap + footerHeight) :
                 new Size(margin * 2 + count * width + Math.Max(0, count - 1) * gap, headerHeight + tileHeight + footerHeight);
             bool hasPages = windows.Count > capacity;
-            previousButton = !hasPages ? Rectangle.Empty : vertical ? new Rectangle(S(5), Height - footerHeight, S(24), S(22)) : new Rectangle(ClientSize.Width - S(116), S(1), S(24), S(27));
-            nextButton = !hasPages ? Rectangle.Empty : vertical ? new Rectangle(Width - S(29), Height - footerHeight, S(24), S(22)) : new Rectangle(ClientSize.Width - S(88), S(1), S(24), S(27));
-            settingsButton = new Rectangle(ClientSize.Width - S(60), S(1), S(24), S(27));
+            previousButton = !hasPages ? Rectangle.Empty : vertical ? new Rectangle(S(5), Height - footerHeight, S(24), S(22)) : new Rectangle(ClientSize.Width - S(88), S(1), S(24), S(27));
+            nextButton = !hasPages ? Rectangle.Empty : vertical ? new Rectangle(Width - S(29), Height - footerHeight, S(24), S(22)) : new Rectangle(ClientSize.Width - S(60), S(1), S(24), S(27));
             hideButton = new Rectangle(ClientSize.Width - S(32), S(1), S(24), S(27));
             for (int i = 0; i < count; i++)
             {
@@ -708,7 +709,7 @@ namespace PeekJet
 
         private bool IsControlPoint(Point point)
         {
-            return previousButton.Contains(point) || nextButton.Contains(point) || settingsButton.Contains(point) || hideButton.Contains(point);
+            return previousButton.Contains(point) || nextButton.Contains(point) || hideButton.Contains(point);
         }
         private void OnPointerDown(object sender, MouseEventArgs e)
         {
@@ -775,7 +776,7 @@ namespace PeekJet
             if (!SelectionEnabled) return;
             int index = Tiles.FindIndex(t => t.Bounds.Contains(e.Location));
             bool control = IsControlPoint(e.Location);
-            int nextControl = Array.FindIndex(new[] { previousButton, nextButton, settingsButton, hideButton }, r => r.Contains(e.Location));
+            int nextControl = Array.FindIndex(new[] { previousButton, nextButton, hideButton }, r => r.Contains(e.Location));
             Cursor = index >= 0 || control ? Cursors.Hand : Cursors.SizeAll;
             if (index == hovered && nextControl == hoveredControl) return;
             hoveredControl = nextControl;
@@ -791,7 +792,6 @@ namespace PeekJet
             if (e.Button == MouseButtons.Right) { menu.Show(this, e.Location); return; }
             if (e.Button != MouseButtons.Left) return;
             if (hideButton.Contains(e.Location)) { HideDock(); return; }
-            if (settingsButton.Contains(e.Location)) { menu.Show(this, new Point(settingsButton.Left, settingsButton.Bottom)); return; }
             if (previousButton.Contains(e.Location)) { ChangePage(-1); return; }
             if (nextButton.Contains(e.Location)) { ChangePage(1); return; }
             var tile = Tiles.FirstOrDefault(t => t.Bounds.Contains(e.Location));
@@ -810,21 +810,20 @@ namespace PeekJet
             base.OnPaint(e);
             Graphics g = e.Graphics;
             g.SmoothingMode = SmoothingMode.AntiAlias;
+            g.PixelOffsetMode = PixelOffsetMode.HighQuality;
             if (palette == null) return;
-            ThemeDrawing.Fill(g, new Rectangle(0, 0, Width - 1, Height - 1), S(12), palette.Surface);
-            ThemeDrawing.Stroke(g, new Rectangle(0, 0, Width - 1, Height - 1), S(12), palette.Border, 1);
+            ThemeDrawing.Fill(g, ClientRectangle, S(12), palette.Surface);
+            ThemeDrawing.Stroke(g, ClientRectangle, S(12), palette.Border, 1);
             bool crowdedHeader = windows.Count > capacity && dockEdge != DockEdge.Left && dockEdge != DockEdge.Right && Width < S(270);
             if (!crowdedHeader)
             {
-                ThemeDrawing.Fill(g, new Rectangle(S(9), S(10), S(3), S(11)), S(2), SelectionEnabled ? palette.Accent : palette.Muted);
-                if (Width >= S(110)) TextRenderer.DrawText(g, Width < S(270) ? "PJ" : "PEEKJET", brandFont, new Rectangle(S(19), S(1), S(55), S(27)), palette.Text, TextFormatFlags.VerticalCenter);
+                if (Width >= S(90)) TextRenderer.DrawText(g, Width < S(270) ? "PJ" : "PEEKJET", brandFont, new Rectangle(S(10), S(1), S(60), S(27)), palette.Text, TextFormatFlags.VerticalCenter);
             }
             // Leave room for controls even on a narrow, single-card dock.
             if (Width >= S(320)) TextRenderer.DrawText(g, windows.Count + " 个工作区", smallFont, new Rectangle(S(80), S(2), S(90), S(25)), palette.Muted, TextFormatFlags.VerticalCenter);
             DrawButton(g, previousButton, "\uE76B", page > 0, 0);
             DrawButton(g, nextButton, "\uE76C", (page + 1) * capacity < windows.Count, 1);
-            DrawButton(g, settingsButton, "\uE713", true, 2);
-            DrawButton(g, hideButton, "\uE921", true, 3);
+            DrawButton(g, hideButton, "\uE921", true, 2);
             if (windows.Count == 0)
             {
                 TextRenderer.DrawText(g, "等待 VS Code 窗口", titleFont, new Rectangle(S(20), S(59), Width - S(40), S(25)), palette.Text, TextFormatFlags.HorizontalCenter);

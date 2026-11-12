@@ -51,7 +51,7 @@ namespace PeekJet
                         {
                             dock.DrawToBitmap(screenshot, new Rectangle(Point.Empty, dock.Size));
                             using (var g = Graphics.FromImage(screenshot))
-                            using (var shape = ThemeDrawing.Rounded(new Rectangle(Point.Empty, dock.Size), 15))
+                            using (var shape = dock.Region.Clone())
                             using (var corners = new Region(new Rectangle(Point.Empty, dock.Size)))
                             {
                                 corners.Exclude(shape);
