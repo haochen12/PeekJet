@@ -1,28 +1,10 @@
 # Contributing
 
-Use Windows 10 or 11 with .NET Framework 4.8. No NuGet packages or web services are required.
+欢迎提交问题、主题和 Pull Request。请先阅读 [开发指南](docs/DEVELOPMENT.md) / [Development guide](docs/DEVELOPMENT.en.md)。
 
-```powershell
-powershell -NoProfile -ExecutionPolicy Bypass -File .\build.ps1
-```
+- **反馈问题**：提供复现步骤、Windows 版本、显示器数量、缩放比例和停靠位置。
+- **提交改动**：说明用户可见的变化和验证结果；界面截图使用示例工作区。
+- **交互约定**：保留闲置穿透、可配置激活时间（默认 150ms）、用户选择的停靠边缘和输入避让。
+- **隐私**：截图和日志不含私密代码、终端凭据或输入内容。
 
-Run the theme render checks on any Windows desktop, including CI:
-
-```powershell
-Start-Process .\dist\PeekJet.exe '--self-test-themes' -Wait
-Get-Content .\dist\theme-test.log
-```
-
-Run `--self-test` on an **unlocked desktop** for live DWM previews, switching, real mouse drag, keyboard event forwarding, monitor layouts and typing avoidance. It briefly opens test windows and sends F24 to a test window, without entering text or shell commands. Use `--self-test-avoidance` while locked to check avoidance state without real keyboard or screenshot checks.
-
-Generate the documentation gallery with `--render-themes`. It uses the actual dock renderer and synthetic sample editors. It never includes the user's editor content. Source scenes live in `ThemeGallery.cs`.
-
-## Theme contributions
-
-Add a `ThemePalette` to `ThemeCatalog.All` in `Themes.cs`. The menu and gallery discover it automatically. Update descriptions and include readable primary and secondary text colors. The theme test checks text contrast, rendered background colors, system theme resolution and appearance state preservation.
-
-## Pull requests
-
-Describe the visible behavior and include the relevant validation result. For a UI change, include a screenshot with example workspaces. Preserve click-through while idle, 250 ms activation, the user's dock edge, and typing avoidance. Avoid collecting editor contents or key values.
-
-Report reproducible bugs with Windows version, display scaling, monitor count, dock edge and steps. Do not include terminal secrets or private source code in screenshots or logs.
+Bug reports should include reproduction steps, Windows version, monitor count, scaling and dock edge. Pull requests should describe the visible behavior and relevant validation. Use example workspaces in screenshots, preserve configurable hover timing and input avoidance, and keep private content out of reports.

@@ -20,7 +20,7 @@ namespace PeekJet
             {
                 results.Add("INFO: Process architecture " + (IntPtr.Size * 8) + "-bit");
                 TestEdges(results);
-                for (int i = 0; i < 7; i++)
+                for (int i = 0; i < 11; i++)
                 {
                     var source = new Form { Text = "Minimize test " + i, ShowInTaskbar = false };
                     sources.Add(source); source.Show();
@@ -34,8 +34,12 @@ namespace PeekJet
                     Check(dock.Tiles.Count < sources.Count, "Minimize test includes windows outside the current page", results);
                     var thumbnailHandles = dock.Tiles.ToDictionary(t => t.Window.Handle, t => t.Thumbnail);
                     dock.SelectPreviewSize(80);
-                    Check(dock.Tiles.All(t => thumbnailHandles.ContainsKey(t.Window.Handle) && thumbnailHandles[t.Window.Handle] == t.Thumbnail),
+                    Check(dock.Tiles.Where(t => thumbnailHandles.ContainsKey(t.Window.Handle)).All(t => thumbnailHandles[t.Window.Handle] == t.Thumbnail),
                         "Resizing reuses existing DWM thumbnail handles", results);
+                    Check(dock.Tiles[0].LastOpacity < dock.Tiles[1].LastOpacity, "Current editor preview is visually subdued", results);
+                    dock.RefreshWindows(windows, sources[1].Handle);
+                    Check(dock.Tiles[1].LastOpacity < dock.Tiles[0].LastOpacity, "Subdued preview follows the active editor and restores the previous preview", results);
+                    dock.RefreshWindows(windows, sources[0].Handle);
                     dock.Update();
                     int invalidations = 0;
                     dock.Invalidated += delegate { invalidations++; };
@@ -68,7 +72,7 @@ namespace PeekJet
                     }
                 }
                 else results.Add("SKIP: real VS Code DWM interop requires at least two editor windows");
-                TestDwellProgress(results);
+                TestHoverActivation(results);
                 return 0;
             }
             catch (Exception error) { results.Add("FAIL: " + error); return 1; }
@@ -79,7 +83,7 @@ namespace PeekJet
             }
         }
 
-        private static void TestDwellProgress(List<string> results)
+        private static void TestHoverActivation(List<string> results)
         {
             using (var first = new Form { Text = "Dwell A", ShowInTaskbar = false })
             using (var second = new Form { Text = "Dwell B", ShowInTaskbar = false })
@@ -100,44 +104,41 @@ namespace PeekJet
                 using (var graphics = dock.CreateGraphics())
                 { jitter = (int)Math.Round(9 * graphics.DpiX / 96f); movement = (int)Math.Round(20 * graphics.DpiX / 96f); }
                 int invalidations = 0;
-                Rectangle lastInvalid = Rectangle.Empty;
-                dock.Invalidated += delegate(object sender, InvalidateEventArgs e) { invalidations++; lastInvalid = e.InvalidRect; };
+                dock.Invalidated += delegate { invalidations++; };
                 dock.UpdatePointer(point, false, 0);
                 dock.UpdatePointer(point, false, 30);
-                Check(dock.DwellProgress == 0 && !dock.SelectionEnabled, "Short pointer crossings do not flash a progress line", results);
+                Check(!dock.SelectionEnabled, "Short pointer crossings do not enable selection", results);
+                int beforeFade = invalidations;
                 dock.UpdatePointer(point, false, 60);
-                double previousProgress = dock.DwellProgress, previousOpacity = dock.Opacity;
+                double previousOpacity = dock.Opacity;
                 dock.UpdatePointer(new Point(point.X + jitter, point.Y), false, 125);
-                Check(dock.DwellProgress > previousProgress && dock.Opacity > previousOpacity,
-                    "Small pointer jitter does not roll progress or brightness back", results);
-                Check(!lastInvalid.IsEmpty && lastInvalid.Top > dock.Height / 2,
-                    "Dwell animation invalidates the footer instead of every preview card", results);
+                Check(dock.Opacity > previousOpacity,
+                    "Small pointer jitter does not roll brightness back", results);
+                Check(invalidations == beforeFade, "Brightness-only dwell does not repaint a progress bar or preview cards", results);
                 dock.UpdatePointer(point, false, 249);
-                Check(!dock.SelectionEnabled, "Progress changes preserve the 250 ms selection threshold", results);
+                Check(!dock.SelectionEnabled, "Configured 250 ms selection threshold is preserved", results);
                 dock.UpdatePointer(point, false, 250);
-                Check(dock.SelectionEnabled && dock.DwellProgress == 0, "Completion enables selection and clears the progress line", results);
+                Check(dock.SelectionEnabled, "Completion enables selection", results);
 
                 dock.UpdatePointer(outside, false, 1000);
                 dock.UpdatePointer(point, false, 2000);
                 dock.UpdatePointer(point, false, 2125);
-                int beforeCancel = invalidations;
                 dock.UpdatePointer(outside, false, 2130);
-                Check(dock.DwellProgress == 0 && invalidations > beforeCancel && Math.Abs(dock.Opacity - 0.58) < 0.01,
-                    "Leaving midway invalidates and erases the old line immediately", results);
+                Check(!dock.SelectionEnabled && Math.Abs(dock.Opacity - 0.58) < 0.01,
+                    "Leaving midway restores idle brightness", results);
 
                 dock.UpdatePointer(point, false, 3000);
                 dock.UpdatePointer(point, false, 3125);
-                beforeCancel = invalidations;
                 dock.UpdatePointer(point, true, 3130);
-                Check(dock.DwellProgress == 0 && invalidations > beforeCancel && !dock.SelectionEnabled && (Native.ExtendedStyle(dock.Handle) & 0x20) != 0,
-                    "Held-button cancellation erases progress and keeps click-through", results);
+                Check(Math.Abs(dock.Opacity - 0.58) < 0.01 && !dock.SelectionEnabled && (Native.ExtendedStyle(dock.Handle) & 0x20) != 0,
+                    "Held-button cancellation restores idle brightness and keeps click-through", results);
 
                 dock.UpdatePointer(point, false, 4000);
                 dock.UpdatePointer(point, false, 4125);
                 var moved = new Point(point.X + movement, point.Y);
                 dock.UpdatePointer(moved, false, 4130);
                 dock.UpdatePointer(moved, false, 4160);
-                Check(dock.DwellProgress == 0 && !dock.SelectionEnabled, "Significant movement resets dwell without a short progress flash", results);
+                Check(!dock.SelectionEnabled, "Significant movement resets dwell", results);
                 dock.UpdatePointer(moved, false, 4379);
                 Check(!dock.SelectionEnabled, "Movement starts a fresh full dwell interval", results);
                 dock.UpdatePointer(moved, false, 4380);
@@ -148,8 +149,8 @@ namespace PeekJet
                     dock.SelectHoverDelay(delay);
                     dock.UpdatePointer(point, false, started);
                     dock.UpdatePointer(point, false, started + delay / 2);
-                    Check(dock.DwellProgress > 0 && dock.DwellProgress < 1 && dock.Opacity > 0.58 && dock.Opacity < 0.97,
-                        "Configured delay keeps progressive brightness and progress: " + delay + " ms", results);
+                    Check(dock.Opacity > 0.58 && dock.Opacity < 0.97,
+                        "Configured delay keeps progressive brightness: " + delay + " ms", results);
                     dock.UpdatePointer(point, false, started + delay - 1);
                     Check(!dock.SelectionEnabled && (Native.ExtendedStyle(dock.Handle) & 0x20) != 0,
                         "Configured delay stays click-through until due: " + delay + " ms", results);
@@ -162,7 +163,7 @@ namespace PeekJet
                 dock.UpdatePointer(point, false, started);
                 dock.UpdatePointer(point, false, started + 300);
                 dock.SelectHoverDelay(100);
-                Check(!dock.SelectionEnabled && dock.DwellProgress == 0 && Math.Abs(dock.Opacity - 0.58) < 0.01,
+                Check(!dock.SelectionEnabled && Math.Abs(dock.Opacity - 0.58) < 0.01,
                     "Changing delay clears an in-progress dwell instead of immediately arming", results);
             }
         }
@@ -432,7 +433,7 @@ namespace PeekJet
             var forms = new List<Form>();
             try
             {
-                for (int i = 0; i < 6; i++)
+                for (int i = 0; i < 11; i++)
                 {
                     var form = new Form { Text = "Edge test " + i, ShowInTaskbar = false, Size = new Size(400, 300) };
                     forms.Add(form); form.Show();
@@ -457,9 +458,13 @@ namespace PeekJet
                             bool ordered = true;
                             for (int i = 1; i < dock.Tiles.Count; i++)
                                 ordered &= vertical ? dock.Tiles[i - 1].Bounds.Bottom <= dock.Tiles[i].Bounds.Top && dock.Tiles[i - 1].Bounds.X == dock.Tiles[i].Bounds.X : dock.Tiles[i - 1].Bounds.Right <= dock.Tiles[i].Bounds.Left && dock.Tiles[i - 1].Bounds.Y == dock.Tiles[i].Bounds.Y;
-                            Check(aligned && centered && area.Contains(dock.Bounds) && ordered && dock.Tiles.All(t => dock.ClientRectangle.Contains(t.Bounds) && t.Thumbnail != IntPtr.Zero), "Edge layout " + edge + " on " + screen.DeviceName, results);
+                            int firstPageCount = dock.Tiles.Count;
+                            Check(aligned && centered && area.Contains(dock.Bounds) && ordered && firstPageCount <= 10 && dock.Tiles.All(t => dock.ClientRectangle.Contains(t.Bounds) && t.Thumbnail != IntPtr.Zero), "Edge layout " + edge + " on " + screen.DeviceName + ": " + firstPageCount + " cards", results);
+                            int available = vertical ? area.Height - inset * 2 : area.Width - inset * 2;
+                            int neededForTen = vertical ? dock.Height + (10 - firstPageCount) * (dock.Tiles[0].Bounds.Height + inset) : dock.Width + (10 - firstPageCount) * (dock.Tiles[0].Bounds.Width + inset);
+                            if (neededForTen <= available) Check(firstPageCount == 10, "Ten previews fit before pagination at " + edge, results);
                             dock.ChangePage(1); Application.DoEvents();
-                            Check(dock.Tiles.Count == 1 && dock.Tiles[0].Window.Handle == forms[5].Handle && area.Contains(dock.Bounds) && dock.Tiles[0].Thumbnail != IntPtr.Zero, "Edge pagination " + edge + " on " + screen.DeviceName, results);
+                            Check(dock.Tiles.Count == Math.Min(firstPageCount, forms.Count - firstPageCount) && dock.Tiles[0].Window.Handle == forms[firstPageCount].Handle && area.Contains(dock.Bounds) && dock.Tiles[0].Thumbnail != IntPtr.Zero, "Edge pagination " + edge + " on " + screen.DeviceName, results);
                         }
                     }
                 }

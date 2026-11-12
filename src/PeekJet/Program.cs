@@ -232,12 +232,6 @@ namespace PeekJet
         private IntPtr active;
         private int hoverDelayMilliseconds = 150;
         internal int HoverDelayMilliseconds { get { return hoverDelayMilliseconds; } }
-        private int DwellVisualDelayMilliseconds { get { return Math.Min(40, hoverDelayMilliseconds / 5); } }
-        internal double DwellProgress
-        {
-            get { return hoverStarted < 0 || SelectionEnabled ? 0 : Math.Max(0, Math.Min(1,
-                (double)(hoverElapsed - DwellVisualDelayMilliseconds) / (HoverDelayMilliseconds - DwellVisualDelayMilliseconds))); }
-        }
         private int hovered = -1, page, capacity = 4, preferredWidth = 100;
         private DockEdge dockEdge = DockEdge.Top;
         private bool manuallyHidden, hotkeyRegistered, disposing, arranging, arrangeAgain;
@@ -591,8 +585,8 @@ namespace PeekJet
             width = Math.Min(width, Math.Max(S(60), (int)((area.Height - S(20) - headerHeight - footerHeight - S(22)) * 16.0 / 9.0)));
             int previewHeight = (int)(width * 9.0 / 16.0);
             int tileHeight = previewHeight + S(22);
-            capacity = vertical ? Math.Max(1, Math.Min(5, (area.Height - S(20) - headerHeight - footerHeight + gap) / (tileHeight + gap))) :
-                Math.Max(1, Math.Min(5, (usable - contentLeft - contentRight + gap) / (width + gap)));
+            capacity = vertical ? Math.Max(1, Math.Min(10, (area.Height - S(20) - headerHeight - footerHeight + gap) / (tileHeight + gap))) :
+                Math.Max(1, Math.Min(10, (usable - contentLeft - contentRight + gap) / (width + gap)));
             int maxPage = Math.Max(0, (windows.Count - 1) / capacity);
             page = Math.Min(page, maxPage);
             int count = Math.Min(capacity, Math.Max(0, windows.Count - page * capacity));
@@ -653,13 +647,14 @@ namespace PeekJet
                 int w = Math.Max(1, (int)(source.Width * ratio)), h = Math.Max(1, (int)(source.Height * ratio));
                 destination = new Rectangle(destination.X + (destination.Width - w) / 2, destination.Y + (destination.Height - h) / 2, w, h);
             }
-            if (tile.PropertiesSet && tile.LastDestination == destination && tile.LastOpacity == previewOpacity && tile.LastVisible == Visible) return;
-            var properties = new Native.ThumbnailProperties { Flags = 1 | 4 | 8 | 16, Destination = new Native.Rect(destination.X, destination.Y, destination.Width, destination.Height), Opacity = previewOpacity, Visible = Visible, ClientOnly = false };
+            byte thumbnailOpacity = tile.Window.Handle == active ? (byte)Math.Round(previewOpacity * 0.65) : previewOpacity;
+            if (tile.PropertiesSet && tile.LastDestination == destination && tile.LastOpacity == thumbnailOpacity && tile.LastVisible == Visible) return;
+            var properties = new Native.ThumbnailProperties { Flags = 1 | 4 | 8 | 16, Destination = new Native.Rect(destination.X, destination.Y, destination.Width, destination.Height), Opacity = thumbnailOpacity, Visible = Visible, ClientOnly = false };
             tile.LastError = Native.DwmUpdateThumbnailProperties(tile.Thumbnail, ref properties);
             if (tile.LastError != 0) tile.Dispose();
             else
             {
-                tile.LastDestination = destination; tile.LastOpacity = previewOpacity;
+                tile.LastDestination = destination; tile.LastOpacity = thumbnailOpacity;
                 tile.LastVisible = Visible; tile.PropertiesSet = true;
             }
         }
@@ -796,20 +791,10 @@ namespace PeekJet
                     OnPointerMove(this, new MouseEventArgs(MouseButtons.None, 0, local.X, local.Y, 0));
                 }
             }
-            InvalidateDwellProgress();
-        }
-        private Rectangle DwellProgressBounds { get { return new Rectangle(0, Math.Max(0, Height - S(10)), Width, S(10)); } }
-        private void InvalidateDwellProgress()
-        {
-            if (IsHandleCreated && !disposing) Invalidate(DwellProgressBounds);
         }
         private void ResetDwell()
         {
-            bool hadProgress = hoverStarted >= 0;
             hoverStarted = -1; hoverElapsed = 0;
-            // Opacity changes do not repaint the client bitmap. Explicitly erase
-            // the old line even when selection was never enabled.
-            if (hadProgress) InvalidateDwellProgress();
         }
         private void ApplyHoverBrightness(double progress)
         {
@@ -960,11 +945,6 @@ namespace PeekJet
             if (palette == null) return;
             g.Clear(palette.Surface);
             ThemeDrawing.Stroke(g, ClientRectangle, CornerRadius, palette.Border, 1);
-            if (e.ClipRectangle.Top >= DwellProgressBounds.Top)
-            {
-                DrawFooter(g);
-                return;
-            }
             var brandState = g.Save();
             g.TranslateTransform(S(13), Height / 2f);
             g.RotateTransform(90);
@@ -983,17 +963,26 @@ namespace PeekJet
             {
                 var tile = Tiles[i];
                 bool selected = tile.Window.Handle == active;
-                bool pointed = SelectionEnabled && i == hovered;
-                Color edge = pointed ? Blend(palette.Border, palette.Accent, 0.5f) : Blend(palette.Surface, palette.Border, 0.6f);
-                ThemeDrawing.Fill(g, tile.Bounds, S(8), pointed ? Blend(palette.Card, palette.Hover, 0.6f) : palette.Card);
-                ThemeDrawing.Fill(g, tile.Preview, S(5), palette.Preview);
+                bool pointed = !selected && SelectionEnabled && i == hovered;
+                Color edge = selected ? Blend(palette.Surface, palette.Border, 0.35f) : pointed ? Blend(palette.Border, palette.Accent, 0.5f) : Blend(palette.Surface, palette.Border, 0.6f);
+                ThemeDrawing.Fill(g, tile.Bounds, S(8), selected ? Blend(palette.Surface, palette.Card, 0.35f) : pointed ? Blend(palette.Card, palette.Hover, 0.6f) : palette.Card);
+                ThemeDrawing.Fill(g, tile.Preview, S(5), selected ? Blend(palette.Preview, palette.Surface, 0.4f) : palette.Preview);
                 ThemeDrawing.Stroke(g, tile.Bounds, S(8), edge, 1);
                 if (tile.ExampleImage != null)
                 {
                     double ratio = Math.Min((double)tile.Preview.Width / tile.ExampleImage.Width, (double)tile.Preview.Height / tile.ExampleImage.Height);
                     int imageWidth = (int)(tile.ExampleImage.Width * ratio), imageHeight = (int)(tile.ExampleImage.Height * ratio);
                     g.InterpolationMode = InterpolationMode.HighQualityBicubic;
-                    g.DrawImage(tile.ExampleImage, new Rectangle(tile.Preview.X + (tile.Preview.Width - imageWidth) / 2, tile.Preview.Y + (tile.Preview.Height - imageHeight) / 2, imageWidth, imageHeight));
+                    var destination = new Rectangle(tile.Preview.X + (tile.Preview.Width - imageWidth) / 2, tile.Preview.Y + (tile.Preview.Height - imageHeight) / 2, imageWidth, imageHeight);
+                    if (selected)
+                    {
+                        using (var attributes = new System.Drawing.Imaging.ImageAttributes())
+                        {
+                            attributes.SetColorMatrix(new System.Drawing.Imaging.ColorMatrix { Matrix33 = 0.65f });
+                            g.DrawImage(tile.ExampleImage, destination, 0, 0, tile.ExampleImage.Width, tile.ExampleImage.Height, GraphicsUnit.Pixel, attributes);
+                        }
+                    }
+                    else g.DrawImage(tile.ExampleImage, destination);
                 }
                 else if (tile.Thumbnail == IntPtr.Zero)
                     TextRenderer.DrawText(g, "\uE91B", iconFont, tile.Preview, palette.Muted, TextFormatFlags.HorizontalCenter | TextFormatFlags.VerticalCenter);
@@ -1002,22 +991,22 @@ namespace PeekJet
                 {
                     using (var pen = new Pen(palette.Muted)) g.DrawEllipse(pen, tile.Bounds.X + S(7), tile.Bounds.Bottom - S(12), S(4), S(4));
                 }
-                else using (var brush = new SolidBrush(selected ? palette.Accent : palette.Muted))
+                else using (var brush = new SolidBrush(palette.Muted))
                     g.FillEllipse(brush, tile.Bounds.X + S(7), tile.Bounds.Bottom - S(12), S(4), S(4));
                 if (selected)
                 {
-                    using (var pen = new Pen(palette.Accent, Math.Max(1, S(2))))
+                    using (var pen = new Pen(palette.Muted, Math.Max(1, S(2))))
                     {
                         pen.StartCap = pen.EndCap = LineCap.Round;
                         g.DrawLine(pen, tile.Bounds.Left + S(18), tile.Bounds.Bottom - S(2), tile.Bounds.Left + S(32), tile.Bounds.Bottom - S(2));
                     }
                 }
                 var label = new Rectangle(tile.Bounds.X + S(16), tile.Preview.Bottom + S(2), tile.Bounds.Width - S(22), S(20));
-                TextRenderer.DrawText(g, title, titleFont, label, palette.Text, TextFormatFlags.EndEllipsis | TextFormatFlags.VerticalCenter | TextFormatFlags.SingleLine | TextFormatFlags.NoPrefix);
+                TextRenderer.DrawText(g, title, titleFont, label, selected ? palette.Muted : palette.Text, TextFormatFlags.EndEllipsis | TextFormatFlags.VerticalCenter | TextFormatFlags.SingleLine | TextFormatFlags.NoPrefix);
             }
-            DrawFooter(g);
+            DrawPageIndicators(g);
         }
-        private void DrawFooter(Graphics g)
+        private void DrawPageIndicators(Graphics g)
         {
             int pages = (windows.Count + capacity - 1) / capacity;
             if (pages > 1)
@@ -1028,15 +1017,6 @@ namespace PeekJet
                 for (int i = 0; i < dots; i++)
                     using (var brush = new SolidBrush(startPage + i == page ? palette.Accent : palette.Border))
                         g.FillEllipse(brush, startX + i * S(7), dotY, S(3), S(3));
-            }
-            if (DwellProgress > 0)
-            {
-                float length = (float)((Width - S(24)) * DwellProgress);
-                using (var pen = new Pen(palette.Accent, Math.Max(1, S(2))))
-                {
-                    pen.StartCap = pen.EndCap = LineCap.Round;
-                    g.DrawLine(pen, S(12), Height - S(2), S(12) + length, Height - S(2));
-                }
             }
         }
         private void DrawButton(Graphics g, Rectangle rect, string text, bool enabled, int index)

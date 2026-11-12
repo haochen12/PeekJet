@@ -1,5 +1,13 @@
 # Changelog
 
+## Unreleased
+
+- Organize application sources, checks, assets and tooling into dedicated directories; keep root build/package commands.
+- Shorten both READMEs to quick-start guides, add bilingual usage/development docs, and include offline docs in portable archives.
+- Subdue the current editor preview, project name and frame, leaving switch targets visually prominent.
+- Remove the dwell progress bar; gradual brightness alone indicates hover activation, without per-frame client repainting.
+- Increase the per-page preview limit to 10, with earlier pagination when screen space is insufficient.
+
 ## 0.2.0 — 2026-11-12
 
 - Refresh the brand icon with a blue rounded tile, layered windows and a forward mark; supply native 16–256 px variants shared by the executable, tray and window.

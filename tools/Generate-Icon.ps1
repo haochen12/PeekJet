@@ -70,7 +70,8 @@ public static class PeekJetIconAssets
             using (var bitmap = Render(size))
             using (var stream = new MemoryStream())
             { bitmap.Save(stream, ImageFormat.Png); frames.Add(stream.ToArray()); }
-        using (var file = new BinaryWriter(File.Create(Path.Combine(root, "app.ico"))))
+        string assets = Path.Combine(root, "assets"); Directory.CreateDirectory(assets);
+        using (var file = new BinaryWriter(File.Create(Path.Combine(assets, "app.ico"))))
         {
             file.Write((ushort)0); file.Write((ushort)1); file.Write((ushort)sizes.Length);
             int offset = 6 + 16 * sizes.Length;
@@ -118,4 +119,4 @@ public static class PeekJetIconAssets
 }
 '@
 [PeekJetIconAssets]::Generate((Split-Path -Parent $PSScriptRoot))
-Write-Host 'Updated app.ico and docs/branding assets.'
+Write-Host 'Updated assets/app.ico and docs/branding assets.'
