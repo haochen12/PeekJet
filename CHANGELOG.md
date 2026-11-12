@@ -1,7 +1,8 @@
 # Changelog
 
-## Unreleased
+## 0.2.1 — 2026-11-12
 
+- Keep hover brightness continuous when mouse movement restarts the dwell timer; fade out on exit while restoring click-through immediately.
 - Organize application sources, checks, assets and tooling into dedicated directories; keep root build/package commands.
 - Shorten both READMEs to quick-start guides, add bilingual usage/development docs, and include offline docs in portable archives.
 - Subdue the current editor preview, project name and frame, leaving switch targets visually prominent.

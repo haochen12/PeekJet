@@ -207,6 +207,8 @@ namespace PeekJet
         private readonly System.Windows.Forms.Timer pointerTimer = new System.Windows.Forms.Timer();
         private long hoverStarted = -1;
         private long hoverElapsed;
+        private double hoverBrightness, dwellBrightnessStart, fadeOutFrom;
+        private long fadeOutStarted = -1;
         private byte previewOpacity = 180;
         private bool avoidWhileTyping = true;
         private long lastTypingAt = -1000000, recoveryStarted = -1;
@@ -750,7 +752,7 @@ namespace PeekJet
             }
             bool buttonsDown = (Native.GetAsyncKeyState(1) & 0x8000) != 0 || (Native.GetAsyncKeyState(2) & 0x8000) != 0 || (Native.GetAsyncKeyState(4) & 0x8000) != 0;
             UpdatePointer(Cursor.Position, buttonsDown, milliseconds);
-            pointerTimer.Interval = recoveryStarted >= 0 || (hoverStarted >= 0 && !SelectionEnabled) ? 16 : 50;
+            pointerTimer.Interval = recoveryStarted >= 0 || fadeOutStarted >= 0 || (hoverStarted >= 0 && !SelectionEnabled) ? 16 : 50;
         }
         internal void UpdatePointer(Point point, bool buttonsDown, long milliseconds)
         {
@@ -758,11 +760,19 @@ namespace PeekJet
             if (dragPending) return;
             if (TypingAvoidanceActive || typingVisibility < 1) { ResetDwell(); return; }
             if (menu.Visible) { ResetDwell(); return; }
-            if (!Visible || !Bounds.Contains(point))
+            if (!Visible) { ResetInteraction(); return; }
+            AdvanceHoverFadeOut(milliseconds);
+            if (!Bounds.Contains(point))
             {
-                if (SelectionEnabled || hoverStarted >= 0 || hovered >= 0 || hoveredControl >= 0) ResetInteraction();
+                if (fadeOutStarted < 0 && (SelectionEnabled || hoverStarted >= 0 || hovered >= 0 || hoveredControl >= 0 || hoverBrightness > 0))
+                {
+                    // Disable input immediately, but let the visual state ease out.
+                    ResetInteraction(true);
+                    if (hoverBrightness > 0) { fadeOutFrom = hoverBrightness; fadeOutStarted = milliseconds; }
+                }
                 return;
             }
+            fadeOutStarted = -1;
             if (SelectionEnabled) return;
             // Do not capture an in-progress click or drag that started in the window below us.
             if (buttonsDown)
@@ -778,12 +788,15 @@ namespace PeekJet
                 hoverAnchor = point;
                 hoverStarted = milliseconds;
                 hoverElapsed = 0;
-                ApplyHoverBrightness(0);
+                // Restart only the click qualification. Keeping the current visual
+                // level prevents bright/dark pulses while traversing the dock.
+                dwellBrightnessStart = hoverBrightness;
             }
             else
             {
                 hoverElapsed = Math.Max(hoverElapsed, Math.Max(0, milliseconds - hoverStarted));
-                ApplyHoverBrightness((double)hoverElapsed / HoverDelayMilliseconds);
+                double progress = Math.Min(1, (double)hoverElapsed / HoverDelayMilliseconds);
+                ApplyHoverBrightness(dwellBrightnessStart + (1 - dwellBrightnessStart) * progress);
                 if (hoverElapsed >= HoverDelayMilliseconds)
                 {
                     SetSelectionEnabled(true);
@@ -796,9 +809,17 @@ namespace PeekJet
         {
             hoverStarted = -1; hoverElapsed = 0;
         }
+        private void AdvanceHoverFadeOut(long milliseconds)
+        {
+            if (fadeOutStarted < 0) return;
+            double progress = Math.Max(0, Math.Min(1, (milliseconds - fadeOutStarted) / 100.0));
+            ApplyHoverBrightness(fadeOutFrom * (1 - progress));
+            if (progress >= 1) fadeOutStarted = -1;
+        }
         private void ApplyHoverBrightness(double progress)
         {
             progress = Math.Max(0, Math.Min(1, progress));
+            hoverBrightness = progress;
             double eased = progress * progress * (3 - 2 * progress);
             double opacity = (0.58 + (0.97 - 0.58) * eased) * typingVisibility;
             if (Math.Abs(Opacity - opacity) > 0.0001) Opacity = opacity;
@@ -807,23 +828,24 @@ namespace PeekJet
             previewOpacity = thumbnailOpacity;
             foreach (var tile in Tiles) UpdateThumbnail(tile, false);
         }
-        private void SetSelectionEnabled(bool enabled)
+        private void SetSelectionEnabled(bool enabled, bool preserveBrightness = false)
         {
             // A cancelled dwell must also reset a partially completed fade.
-            ApplyHoverBrightness(enabled ? 1 : 0);
+            if (!preserveBrightness) ApplyHoverBrightness(enabled ? 1 : 0);
             if (SelectionEnabled == enabled) return;
             SelectionEnabled = enabled;
             ResetDwell();
             if (IsHandleCreated) Native.SetClickThrough(Handle, !enabled);
             Invalidate();
         }
-        private void ResetInteraction()
+        private void ResetInteraction(bool preserveBrightness = false)
         {
+            if (!preserveBrightness) fadeOutStarted = -1;
             ResetDwell();
             hoveredControl = -1;
             if (hovered != -1) { hovered = -1; tooltip.Hide(this); Invalidate(); }
             Cursor = Cursors.Default;
-            SetSelectionEnabled(false);
+            SetSelectionEnabled(false, preserveBrightness);
         }
 
         private bool IsControlPoint(Point point)

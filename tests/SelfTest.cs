@@ -123,9 +123,30 @@ namespace PeekJet
                 dock.UpdatePointer(outside, false, 1000);
                 dock.UpdatePointer(point, false, 2000);
                 dock.UpdatePointer(point, false, 2125);
+                double beforeLeave = dock.Opacity;
                 dock.UpdatePointer(outside, false, 2130);
-                Check(!dock.SelectionEnabled && Math.Abs(dock.Opacity - 0.58) < 0.01,
-                    "Leaving midway restores idle brightness", results);
+                Check(!dock.SelectionEnabled && Math.Abs(dock.Opacity - beforeLeave) < 0.01 && (Native.ExtendedStyle(dock.Handle) & 0x20) != 0,
+                    "Leaving restores click-through immediately without a brightness jump", results);
+                dock.UpdatePointer(outside, false, 2180);
+                Check(dock.Opacity < beforeLeave && dock.Opacity > 0.58, "Leaving fades through an intermediate brightness", results);
+                double beforeReentry = dock.Opacity;
+                dock.UpdatePointer(point, false, 2180);
+                Check(Math.Abs(dock.Opacity - beforeReentry) < 0.01 && !dock.SelectionEnabled,
+                    "Reentry preserves fade brightness and starts a fresh dwell", results);
+                var traverse = new Point(point.X + movement, point.Y);
+                for (int step = 1; step <= 6; step++)
+                {
+                    double beforeMove = dock.Opacity;
+                    dock.UpdatePointer(step % 2 == 0 ? point : traverse, false, 2180 + step * 30);
+                    Check(dock.Opacity >= beforeMove - 0.001 && !dock.SelectionEnabled,
+                        "Repeated traversal does not flash or arm selection: " + step, results);
+                }
+                dock.UpdatePointer(point, false, 2400);
+                dock.UpdatePointer(point, false, 2610);
+                Check(dock.SelectionEnabled, "Selection activates after settling following traversal", results);
+                dock.UpdatePointer(outside, false, 2620);
+                dock.UpdatePointer(outside, false, 2720);
+                Check(Math.Abs(dock.Opacity - 0.58) < 0.01, "Fade finishes at idle brightness", results);
 
                 dock.UpdatePointer(point, false, 3000);
                 dock.UpdatePointer(point, false, 3125);
@@ -356,6 +377,7 @@ namespace PeekJet
                 dock.UpdatePointer(point, false, 3000);
                 dock.UpdatePointer(point, false, 3125);
                 dock.UpdatePointer(outside, false, 3900);
+                dock.UpdatePointer(outside, false, 4000);
                 Check(Math.Abs(dock.Opacity - 0.58) < 0.01, "Cancelled dwell resets partial fade to idle opacity", results);
                 dock.UpdatePointer(point, false, 4000);
                 dock.UpdatePointer(point, false, 4200);
