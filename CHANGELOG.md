@@ -1,7 +1,12 @@
 # Changelog
 
-## Unreleased
+## 0.1.1 — 2026-11-12
 
+- Simplify the dock to previews and project names, removing the wordmark, window count and footer hints.
+- Reduce panel height, use dots for page indicators, and show navigation/hide controls only while activated.
+- Use antialiased Windows 11 compositor corners, with a rounded-region fallback on older Windows.
+- Align card and panel border strokes inside their bounds to reduce edge artifacts across themes.
+- Refresh the theme gallery using synthetic workspaces and fractional corner coverage.
 - Clean up the upper-left header decoration and unify rounded window/border geometry.
 - Remove the settings button from the dock; settings remain in the tray and dock context menus.
 - Reorganize Chinese and English READMEs with release downloads, usage, build, privacy and contribution sections.

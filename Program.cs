@@ -188,10 +188,10 @@ namespace PeekJet
         private Rectangle layoutWorkArea;
         private IntPtr followedWindow;
         private float scale = 1f;
+        private bool nativeCorners;
+        internal int CornerRadius { get { return S(nativeCorners ? 8 : 12); } }
         private Rectangle previousButton, nextButton, hideButton;
         private ToolTip tooltip = new ToolTip();
-        private string status = "";
-        private DateTime statusUntil;
         private Icon appIcon;
         private readonly bool testing;
 
@@ -245,10 +245,11 @@ namespace PeekJet
         {
             base.OnHandleCreated(e);
             if (!testing) hotkeyRegistered = Native.RegisterHotKey(Handle, 1, 0x4003, (uint)Keys.V);
-            // The explicit window region owns the corner shape. Do not apply a second,
-            // differently sized DWM rounding pass to the same layered window.
-            int corners = 1;
-            Native.DwmSetWindowAttribute(Handle, 33, ref corners, 4);
+            // A GDI window region is a binary mask and cannot antialias its edge.
+            // Uniform window opacity still allows DWM to composite smooth corners.
+            int corners = 2; // DWMWCP_ROUND (Windows 11).
+            nativeCorners = Native.DwmSetWindowAttribute(Handle, 33, ref corners, 4) == 0;
+            UpdateCornerRegion();
             int dark = palette == null || !palette.Light ? 1 : 0;
             Native.DwmSetWindowAttribute(Handle, 20, ref dark, 4);
             Native.SetClickThrough(Handle, !SelectionEnabled);
@@ -380,8 +381,20 @@ namespace PeekJet
         protected override void OnSizeChanged(EventArgs e)
         {
             base.OnSizeChanged(e);
+            UpdateCornerRegion();
+        }
+        private void UpdateCornerRegion()
+        {
             if (ClientSize.Width < 2 || ClientSize.Height < 2) return;
-            using (var path = ThemeDrawing.Rounded(ClientRectangle, (int)Math.Round(12 * Math.Max(1, scale))))
+            // Setting any region disables the compositor's antialiased corners.
+            if (nativeCorners)
+            {
+                var previous = Region;
+                Region = null;
+                if (previous != null) previous.Dispose();
+                return;
+            }
+            using (var path = ThemeDrawing.Rounded(ClientRectangle, CornerRadius))
             {
                 var previous = Region;
                 Region = new Region(path);
@@ -486,23 +499,28 @@ namespace PeekJet
             layoutWorkArea = area;
             bool vertical = dockEdge == DockEdge.Left || dockEdge == DockEdge.Right;
             int margin = S(8), gap = S(6), width = S(preferredWidth);
-            int headerHeight = S(30), footerHeight = S(22);
+            int headerHeight = S(20), footerHeight = S(8);
             int usable = Math.Max(S(160), area.Width - S(32));
             width = Math.Min(width, usable - 2 * margin);
-            width = Math.Min(width, Math.Max(S(60), (int)((area.Height - S(20) - headerHeight - footerHeight - S(24)) * 16.0 / 9.0)));
+            width = Math.Min(width, Math.Max(S(60), (int)((area.Height - S(20) - headerHeight - footerHeight - S(22)) * 16.0 / 9.0)));
             int previewHeight = (int)(width * 9.0 / 16.0);
-            int tileHeight = previewHeight + S(24);
+            int tileHeight = previewHeight + S(22);
             capacity = vertical ? Math.Max(1, Math.Min(5, (area.Height - S(20) - headerHeight - footerHeight + gap) / (tileHeight + gap))) :
                 Math.Max(1, Math.Min(5, (usable - margin * 2 + gap) / (width + gap)));
+            if (vertical && windows.Count > capacity)
+            {
+                footerHeight = S(22);
+                capacity = Math.Max(1, Math.Min(5, (area.Height - S(20) - headerHeight - footerHeight + gap) / (tileHeight + gap)));
+            }
             int maxPage = Math.Max(0, (windows.Count - 1) / capacity);
             page = Math.Min(page, maxPage);
             int count = Math.Min(capacity, Math.Max(0, windows.Count - page * capacity));
             ClientSize = vertical ? new Size(margin * 2 + width, headerHeight + count * tileHeight + Math.Max(0, count - 1) * gap + footerHeight) :
                 new Size(margin * 2 + count * width + Math.Max(0, count - 1) * gap, headerHeight + tileHeight + footerHeight);
             bool hasPages = windows.Count > capacity;
-            previousButton = !hasPages ? Rectangle.Empty : vertical ? new Rectangle(S(5), Height - footerHeight, S(24), S(22)) : new Rectangle(ClientSize.Width - S(88), S(1), S(24), S(27));
-            nextButton = !hasPages ? Rectangle.Empty : vertical ? new Rectangle(Width - S(29), Height - footerHeight, S(24), S(22)) : new Rectangle(ClientSize.Width - S(60), S(1), S(24), S(27));
-            hideButton = new Rectangle(ClientSize.Width - S(32), S(1), S(24), S(27));
+            previousButton = !hasPages ? Rectangle.Empty : vertical ? new Rectangle(S(5), Height - footerHeight, S(24), S(22)) : new Rectangle(ClientSize.Width - S(76), S(1), S(22), S(18));
+            nextButton = !hasPages ? Rectangle.Empty : vertical ? new Rectangle(Width - S(29), Height - footerHeight, S(24), S(22)) : new Rectangle(ClientSize.Width - S(52), S(1), S(22), S(18));
+            hideButton = new Rectangle(ClientSize.Width - S(28), S(1), S(22), S(18));
             for (int i = 0; i < count; i++)
             {
                 var tile = new PreviewTile { Window = windows[page * capacity + i] };
@@ -782,7 +800,11 @@ namespace PeekJet
             hoveredControl = nextControl;
             hovered = index;
             tooltip.Hide(this);
-            if (index >= 0 && !testing) tooltip.Show(Tiles[index].Window.Title + "\n点击切换到此窗口", this, e.X, e.Y - S(46), 4000);
+            if (!testing)
+            {
+                string detail = index >= 0 ? Tiles[index].Window.Title : nextControl == 0 ? "上一页" : nextControl == 1 ? "下一页" : nextControl == 2 ? "隐藏" : "";
+                if (detail.Length > 0) tooltip.Show(detail, this, e.X, e.Y - S(34), 4000);
+            }
             Invalidate();
         }
         private void OnPointerUp(object sender, MouseEventArgs e)
@@ -799,8 +821,7 @@ namespace PeekJet
             tooltip.Hide(this);
             if (!Windows.Activate(tile.Window.Handle))
             {
-                status = "切换未成功，请重试；管理员窗口可能需要相同权限";
-                statusUntil = DateTime.Now.AddSeconds(5);
+                if (!testing) tooltip.Show("暂时无法切换，请重试", this, e.X, e.Y - S(30), 3000);
             }
             RefreshWindows();
         }
@@ -812,23 +833,13 @@ namespace PeekJet
             g.SmoothingMode = SmoothingMode.AntiAlias;
             g.PixelOffsetMode = PixelOffsetMode.HighQuality;
             if (palette == null) return;
-            ThemeDrawing.Fill(g, ClientRectangle, S(12), palette.Surface);
-            ThemeDrawing.Stroke(g, ClientRectangle, S(12), palette.Border, 1);
-            bool crowdedHeader = windows.Count > capacity && dockEdge != DockEdge.Left && dockEdge != DockEdge.Right && Width < S(270);
-            if (!crowdedHeader)
+            g.Clear(palette.Surface);
+            ThemeDrawing.Stroke(g, ClientRectangle, CornerRadius, palette.Border, 1);
+            if (SelectionEnabled)
             {
-                if (Width >= S(90)) TextRenderer.DrawText(g, Width < S(270) ? "PJ" : "PEEKJET", brandFont, new Rectangle(S(10), S(1), S(60), S(27)), palette.Text, TextFormatFlags.VerticalCenter);
-            }
-            // Leave room for controls even on a narrow, single-card dock.
-            if (Width >= S(320)) TextRenderer.DrawText(g, windows.Count + " 个工作区", smallFont, new Rectangle(S(80), S(2), S(90), S(25)), palette.Muted, TextFormatFlags.VerticalCenter);
-            DrawButton(g, previousButton, "\uE76B", page > 0, 0);
-            DrawButton(g, nextButton, "\uE76C", (page + 1) * capacity < windows.Count, 1);
-            DrawButton(g, hideButton, "\uE921", true, 2);
-            if (windows.Count == 0)
-            {
-                TextRenderer.DrawText(g, "等待 VS Code 窗口", titleFont, new Rectangle(S(20), S(59), Width - S(40), S(25)), palette.Text, TextFormatFlags.HorizontalCenter);
-                TextRenderer.DrawText(g, "打开多个工作区以开始预览", smallFont, new Rectangle(S(14), S(93), Width - S(28), S(24)), palette.Muted, TextFormatFlags.HorizontalCenter | TextFormatFlags.EndEllipsis);
-                return;
+                DrawButton(g, previousButton, "\uE76B", page > 0, 0);
+                DrawButton(g, nextButton, "\uE76C", (page + 1) * capacity < windows.Count, 1);
+                DrawButton(g, hideButton, "\uE921", true, 2);
             }
             for (int i = 0; i < Tiles.Count; i++)
             {
@@ -847,19 +858,28 @@ namespace PeekJet
                     g.DrawImage(tile.ExampleImage, new Rectangle(tile.Preview.X + (tile.Preview.Width - imageWidth) / 2, tile.Preview.Y + (tile.Preview.Height - imageHeight) / 2, imageWidth, imageHeight));
                 }
                 else if (tile.Thumbnail == IntPtr.Zero)
-                    TextRenderer.DrawText(g, "暂时无法预览", smallFont, tile.Preview, palette.Muted, TextFormatFlags.HorizontalCenter | TextFormatFlags.VerticalCenter | TextFormatFlags.EndEllipsis);
+                    TextRenderer.DrawText(g, "\uE91B", iconFont, tile.Preview, palette.Muted, TextFormatFlags.HorizontalCenter | TextFormatFlags.VerticalCenter);
                 string title = tile.Window.ProjectName;
-                using (var brush = new SolidBrush(focused ? palette.Accent : palette.Muted))
-                    g.FillEllipse(brush, tile.Bounds.X + S(7), tile.Bounds.Bottom - S(13), S(4), S(4));
+                if (tile.Window.Minimized)
+                {
+                    using (var pen = new Pen(palette.Muted)) g.DrawEllipse(pen, tile.Bounds.X + S(7), tile.Bounds.Bottom - S(12), S(4), S(4));
+                }
+                else using (var brush = new SolidBrush(focused ? palette.Accent : palette.Muted))
+                    g.FillEllipse(brush, tile.Bounds.X + S(7), tile.Bounds.Bottom - S(12), S(4), S(4));
                 var label = new Rectangle(tile.Bounds.X + S(16), tile.Preview.Bottom + S(2), tile.Bounds.Width - S(22), S(20));
-                if (tile.Window.Minimized) { title = "[已最小化] " + title; }
                 TextRenderer.DrawText(g, title, titleFont, label, focused ? palette.AccentText : palette.Text, TextFormatFlags.EndEllipsis | TextFormatFlags.VerticalCenter | TextFormatFlags.SingleLine | TextFormatFlags.NoPrefix);
             }
             bool vertical = dockEdge == DockEdge.Left || dockEdge == DockEdge.Right;
-            string hint = Width < S(200) ? (SelectionEnabled ? "点击 / 拖动" : "停稳 250ms") : (SelectionEnabled ? "点击选择 · 拖动移位" : "停稳 0.25 秒可选择");
-            string footer = DateTime.Now < statusUntil ? status : Width < S(400) ? hint : string.Format("{0} 个窗口 · {1}/{2} 页   |   {3}", windows.Count, page + 1, Math.Max(1, (windows.Count + capacity - 1) / capacity), hint);
-            if (vertical && windows.Count > capacity) footer = string.Format("{0}/{1}", page + 1, (windows.Count + capacity - 1) / capacity);
-            TextRenderer.DrawText(g, footer, smallFont, new Rectangle(vertical && windows.Count > capacity ? S(30) : S(10), Height - S(22), Width - (vertical && windows.Count > capacity ? S(60) : S(20)), S(20)), palette.Muted, TextFormatFlags.EndEllipsis | TextFormatFlags.VerticalCenter | (vertical ? TextFormatFlags.HorizontalCenter : TextFormatFlags.Default));
+            int pages = (windows.Count + capacity - 1) / capacity;
+            if (pages > 1)
+            {
+                int dots = Math.Min(7, pages), startPage = Math.Max(0, Math.Min(page - dots / 2, pages - dots));
+                int startX = (Width - dots * S(7) + S(3)) / 2;
+                int dotY = vertical ? Height - S(12) : Height - S(5);
+                for (int i = 0; i < dots; i++)
+                    using (var brush = new SolidBrush(startPage + i == page ? palette.Accent : palette.Border))
+                        g.FillEllipse(brush, startX + i * S(7), dotY, S(3), S(3));
+            }
             if (!SelectionEnabled && hoverStarted >= 0)
             {
                 int progress = (int)((Width - S(24)) * Math.Min(1.0, (double)hoverElapsed / HoverDelayMilliseconds));

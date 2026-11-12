@@ -55,8 +55,12 @@ namespace PeekJet
     {
         internal static GraphicsPath Rounded(Rectangle bounds, int radius)
         {
+            return Rounded((RectangleF)bounds, radius);
+        }
+        internal static GraphicsPath Rounded(RectangleF bounds, float radius)
+        {
             var path = new GraphicsPath();
-            int diameter = Math.Max(2, Math.Min(radius * 2, Math.Min(bounds.Width, bounds.Height)));
+            float diameter = Math.Max(2, Math.Min(radius * 2, Math.Min(bounds.Width, bounds.Height)));
             path.AddArc(bounds.Left, bounds.Top, diameter, diameter, 180, 90);
             path.AddArc(bounds.Right - diameter, bounds.Top, diameter, diameter, 270, 90);
             path.AddArc(bounds.Right - diameter, bounds.Bottom - diameter, diameter, diameter, 0, 90);
@@ -71,10 +75,13 @@ namespace PeekJet
         }
         internal static void Stroke(Graphics graphics, Rectangle bounds, int radius, Color color, float width)
         {
-            using (var path = Rounded(bounds, radius))
+            // Center the stroke on pixel centers and keep its full coverage inside
+            // the card. Inset pen alignment is unreliable on antialiased curves.
+            var inset = new RectangleF(bounds.X + width / 2, bounds.Y + width / 2,
+                bounds.Width - width, bounds.Height - width);
+            using (var path = Rounded(inset, Math.Max(1, radius - width / 2)))
             using (var pen = new Pen(color, width))
             {
-                pen.Alignment = PenAlignment.Inset;
                 graphics.DrawPath(pen, path);
             }
         }

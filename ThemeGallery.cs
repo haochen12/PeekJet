@@ -50,14 +50,21 @@ namespace PeekJet
                         using (var screenshot = new Bitmap(dock.Width, dock.Height))
                         {
                             dock.DrawToBitmap(screenshot, new Rectangle(Point.Empty, dock.Size));
-                            using (var g = Graphics.FromImage(screenshot))
-                            using (var shape = dock.Region.Clone())
-                            using (var corners = new Region(new Rectangle(Point.Empty, dock.Size)))
+                            // DrawToBitmap does not include the DWM corner mask. Apply
+                            // fractional edge coverage instead of a jagged GDI region.
+                            using (var mask = new Bitmap(dock.Width, dock.Height))
                             {
-                                corners.Exclude(shape);
-                                g.SetClip(corners, System.Drawing.Drawing2D.CombineMode.Replace);
-                                g.CompositingMode = System.Drawing.Drawing2D.CompositingMode.SourceCopy;
-                                using (var transparent = new SolidBrush(Color.Transparent)) g.FillRectangle(transparent, new Rectangle(Point.Empty, dock.Size));
+                                using (var g = Graphics.FromImage(mask))
+                                {
+                                    g.SmoothingMode = System.Drawing.Drawing2D.SmoothingMode.AntiAlias;
+                                    ThemeDrawing.Fill(g, new Rectangle(Point.Empty, dock.Size), dock.CornerRadius, Color.White);
+                                }
+                                for (int y = 0; y < screenshot.Height; y++)
+                                    for (int x = 0; x < screenshot.Width; x++)
+                                    {
+                                        int alpha = mask.GetPixel(x, y).A;
+                                        if (alpha < 255) screenshot.SetPixel(x, y, Color.FromArgb(alpha, screenshot.GetPixel(x, y)));
+                                    }
                             }
                             screenshot.Save(Path.Combine(output, theme.Id + ".png"));
                         }

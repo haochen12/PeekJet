@@ -49,7 +49,7 @@ The release also includes a source archive and `SHA256SUMS.txt`. To uninstall, q
 | Right-click the tray or an activated dock | Open settings |
 | `Ctrl + Alt + V` or a tray click | Toggle visibility or recall an avoided dock |
 
-The dock has no settings button. Use the context menu for appearance, size, screen, dock edge and typing avoidance; use the tray menu to quit. The top-right minus button hides the dock manually.
+The compact dock keeps previews and project names, with full window titles available on hover. Dots indicate pages; arrows and the top-right hide button appear only while activated. Use the context menu for appearance, size, screen, dock edge and typing avoidance; use the tray menu to quit.
 
 Switching workspaces keeps the dock visible. It hides when only zero or one window remains and returns when multiple windows are available. An explicit manual hide is respected until you recall it.
 
