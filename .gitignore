@@ -1,0 +1,9 @@
+dist/
+bin/
+obj/
+.vs/
+*.user
+*.suo
+*.log
+*.zip
+docs/themes/gallery-error.log

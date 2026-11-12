@@ -1,0 +1,22 @@
+name: Bug report / 问题反馈
+description: Report a reproducible problem with window previews or interactions.
+body:
+  - type: textarea
+    id: environment
+    attributes:
+      label: Environment / 环境
+      description: Windows version, VS Code version, display count/scaling, theme, and dock edge.
+    validations:
+      required: true
+  - type: textarea
+    id: steps
+    attributes:
+      label: Reproduction / 复现步骤
+      description: Describe the steps, what happened, and what you expected.
+    validations:
+      required: true
+  - type: textarea
+    id: images
+    attributes:
+      label: Optional screenshot / 可选截图
+      description: Remove private code, terminal secrets and personal information before attaching.
