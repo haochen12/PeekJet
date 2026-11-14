@@ -1,5 +1,9 @@
 # Changelog
 
+## 0.2.2 — 2026-11-14
+
+- Fix the first tray right-click being cancelled while the context menu is populated dynamically.
+
 ## 0.2.1 — 2026-11-12
 
 - Keep hover brightness continuous when mouse movement restarts the dwell timer; fade out on exit while restoring click-through immediately.

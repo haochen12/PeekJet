@@ -271,7 +271,13 @@ namespace PeekJet
             Icon = appIcon;
             tray = new NotifyIcon { Icon = trayIcon, Text = "PeekJet · Ctrl+Alt+V", Visible = true, ContextMenuStrip = menu };
             tray.MouseClick += delegate(object sender, MouseEventArgs e) { if (e.Button == MouseButtons.Left) Toggle(); };
-            menu.Opening += delegate { ClearTypingAvoidance(); SetSelectionEnabled(true); BuildMenu(); };
+            menu.Opening += delegate(object sender, System.ComponentModel.CancelEventArgs e)
+            {
+                ClearTypingAvoidance(); SetSelectionEnabled(true); BuildMenu();
+                // WinForms cancels the first Show when the menu was initially empty,
+                // before Opening gets a chance to populate it. Permit the populated menu.
+                e.Cancel = menu.Items.Count == 0;
+            };
             MouseMove += OnPointerMove;
             MouseDown += OnPointerDown;
             MouseCaptureChanged += delegate

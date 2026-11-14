@@ -19,6 +19,7 @@ namespace PeekJet
             try
             {
                 results.Add("INFO: Process architecture " + (IntPtr.Size * 8) + "-bit");
+                TestFirstMenuOpening(results);
                 TestEdges(results);
                 for (int i = 0; i < 11; i++)
                 {
@@ -80,6 +81,25 @@ namespace PeekJet
             {
                 foreach (var source in sources) source.Dispose();
                 File.WriteAllText(Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "controls-test.log"), string.Join(Environment.NewLine, results), Encoding.UTF8);
+            }
+        }
+
+        private static void TestFirstMenuOpening(List<string> results)
+        {
+            using (var dock = new PreviewDock(null, true))
+            {
+                var flags = System.Reflection.BindingFlags.Instance | System.Reflection.BindingFlags.NonPublic;
+                var menu = (ContextMenuStrip)typeof(PreviewDock).GetField("menu", flags).GetValue(dock);
+                Check(menu.Items.Count == 0, "Tray menu starts without prebuilt items", results);
+                for (int attempt = 1; attempt <= 2; attempt++)
+                {
+                    // Show runs the framework's empty-menu cancellation path before Opening.
+                    var area = Screen.PrimaryScreen.WorkingArea;
+                    menu.Show(new Point(area.Left + 10, area.Top + 10));
+                    Check(menu.Visible && menu.Items.OfType<ToolStripMenuItem>().Any(i => i.Text == "退出"),
+                        "Tray context menu can open on attempt " + attempt, results);
+                    menu.Close();
+                }
             }
         }
 
