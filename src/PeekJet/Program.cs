@@ -237,9 +237,9 @@ namespace PeekJet
         private int hoverDelayMilliseconds = 150;
         internal int HoverDelayMilliseconds { get { return hoverDelayMilliseconds; } }
         private int hovered = -1, page, capacity = 4, preferredWidth = 100;
-        private bool namesOnly;
+        private bool projectNamesMode;
         private int preferredNameWidth = 120;
-        internal bool NamesOnly { get { return namesOnly; } }
+        internal bool ProjectNamesMode { get { return projectNamesMode; } }
         private DockEdge dockEdge = DockEdge.Top;
         private bool manuallyHidden, hotkeyRegistered, disposing, arranging, arrangeAgain;
         private bool followActive = true;
@@ -358,7 +358,8 @@ namespace PeekJet
                     if (ThemeCatalog.Valid(savedTheme)) themeId = savedTheme;
                     int savedDelay = Convert.ToInt32(key.GetValue("HoverDelayMilliseconds", 150));
                     if (savedDelay >= 50 && savedDelay <= 2000) hoverDelayMilliseconds = savedDelay;
-                    namesOnly = Convert.ToString(key.GetValue("DisplayMode", "Preview")) == "NamesOnly";
+                    string savedDisplayMode = Convert.ToString(key.GetValue("DisplayMode", "Preview"));
+                    projectNamesMode = savedDisplayMode == "ProjectNamesMode" || savedDisplayMode == "NamesOnly";
                     preferredNameWidth = Math.Max(100, Math.Min(440, Convert.ToInt32(key.GetValue("NameWidth", 120))));
                 }
             }
@@ -379,7 +380,7 @@ namespace PeekJet
                     key.SetValue("AvoidWhileTyping", avoidWhileTyping ? 1 : 0);
                     key.SetValue("Theme", themeId);
                     key.SetValue("HoverDelayMilliseconds", hoverDelayMilliseconds);
-                    key.SetValue("DisplayMode", namesOnly ? "NamesOnly" : "Preview");
+                    key.SetValue("DisplayMode", projectNamesMode ? "ProjectNamesMode" : "Preview");
                     key.SetValue("NameWidth", preferredNameWidth);
                 }
             }
@@ -415,15 +416,15 @@ namespace PeekJet
         }
         internal void SelectPreviewSize(int width)
         {
-            if (namesOnly) preferredNameWidth = Math.Max(100, Math.Min(440, width + 20));
+            if (projectNamesMode) preferredNameWidth = Math.Max(100, Math.Min(440, width + 20));
             else preferredWidth = Math.Max(80, Math.Min(420, width));
             if (!testing) SaveSettings();
             Arrange();
         }
-        internal void SelectNamesOnly(bool enabled)
+        internal void SelectProjectNamesMode(bool enabled)
         {
-            if (namesOnly == enabled) return;
-            namesOnly = enabled;
+            if (projectNamesMode == enabled) return;
+            projectNamesMode = enabled;
             hovered = hoveredControl = -1;
             tooltip.Hide(this);
             ResetInteraction();
@@ -611,7 +612,7 @@ namespace PeekJet
             int margin = S(8), gap = S(6), width = S(preferredWidth);
             int headerHeight = S(12), footerHeight = S(10);
             int contentLeft = margin + S(18), contentRight = margin + S(34);
-            if (namesOnly)
+            if (projectNamesMode)
             {
                 width = S(preferredNameWidth);
                 headerHeight = vertical ? S(28) : S(6);
@@ -624,8 +625,8 @@ namespace PeekJet
             width = Math.Min(width, usable - contentLeft - contentRight);
             width = Math.Min(width, Math.Max(S(60), (int)((area.Height - S(20) - headerHeight - footerHeight - S(22)) * 16.0 / 9.0)));
             int previewHeight = (int)(width * 9.0 / 16.0);
-            int tileHeight = namesOnly ? S(24) : previewHeight + S(22);
-            if (namesOnly && !vertical && windows.Count > Math.Min(10, Math.Max(1, (usable - contentLeft - contentRight + gap) / (width + gap))))
+            int tileHeight = projectNamesMode ? S(24) : previewHeight + S(22);
+            if (projectNamesMode && !vertical && windows.Count > Math.Min(10, Math.Max(1, (usable - contentLeft - contentRight + gap) / (width + gap))))
                 contentRight = S(94);
             capacity = vertical ? Math.Max(1, Math.Min(10, (area.Height - S(20) - headerHeight - footerHeight + gap) / (tileHeight + gap))) :
                 Math.Max(1, Math.Min(10, (usable - contentLeft - contentRight + gap) / (width + gap)));
@@ -639,7 +640,7 @@ namespace PeekJet
             previousButton = !hasPages ? Rectangle.Empty : new Rectangle(controlX + S(2), controlY - S(22), S(22), S(20));
             nextButton = !hasPages ? Rectangle.Empty : new Rectangle(controlX + S(2), controlY + S(28), S(22), S(20));
             minimizeButton = new Rectangle(controlX, controlY, S(26), S(26));
-            if (namesOnly)
+            if (projectNamesMode)
             {
                 // Short docks need horizontal paging controls; a vertical control stack would clip.
                 int buttonY = vertical ? ClientSize.Height - S(32) : (ClientSize.Height - S(26)) / 2;
@@ -656,7 +657,7 @@ namespace PeekJet
                 else tile = new PreviewTile();
                 tile.Window = window;
                 tile.Bounds = new Rectangle(vertical ? contentLeft : contentLeft + i * (width + gap), vertical ? headerHeight + i * (tileHeight + gap) : headerHeight, width, tileHeight);
-                tile.Preview = namesOnly ? Rectangle.Empty : new Rectangle(tile.Bounds.X + S(3), tile.Bounds.Y + S(3), width - S(6), previewHeight - S(6));
+                tile.Preview = projectNamesMode ? Rectangle.Empty : new Rectangle(tile.Bounds.X + S(3), tile.Bounds.Y + S(3), width - S(6), previewHeight - S(6));
                 Tiles.Add(tile);
                 UpdateThumbnail(tile);
             }
@@ -681,7 +682,7 @@ namespace PeekJet
         }
         private void UpdateThumbnail(PreviewTile tile, bool querySource = true)
         {
-            if (namesOnly) return;
+            if (projectNamesMode) return;
             if (tile.Thumbnail == IntPtr.Zero)
             {
                 IntPtr thumbnail;
@@ -1015,8 +1016,8 @@ namespace PeekJet
             if (palette == null) return;
             g.Clear(palette.Surface);
             ThemeDrawing.Stroke(g, ClientRectangle, CornerRadius, palette.Border, 1);
-            bool namesVertical = namesOnly && (dockEdge == DockEdge.Left || dockEdge == DockEdge.Right);
-            if (namesOnly)
+            bool namesVertical = projectNamesMode && (dockEdge == DockEdge.Left || dockEdge == DockEdge.Right);
+            if (projectNamesMode)
             {
                 var brandBounds = namesVertical ? new Rectangle(0, 0, Width, S(28)) : new Rectangle(S(8), 0, S(54), Height);
                 TextRenderer.DrawText(g, "PeekJet", brandFont, brandBounds, Blend(palette.Surface, palette.Muted, 0.78f),
@@ -1033,7 +1034,7 @@ namespace PeekJet
                     g.DrawString("P E E K J E T", brandFont, brush, new RectangleF(-Height / 2f, -S(10), Height, S(20)), format);
                 g.Restore(brandState);
             }
-            if (namesOnly && !namesVertical)
+            if (projectNamesMode && !namesVertical)
                 using (var pen = new Pen(Blend(palette.Surface, palette.Border, 0.65f)))
                     g.DrawLine(pen, S(65), S(12), S(65), Height - S(12));
             DrawMinimizeButton(g);
@@ -1048,7 +1049,7 @@ namespace PeekJet
                 bool selected = tile.Window.Handle == active;
                 bool pointed = !selected && SelectionEnabled && i == hovered;
                 Color edge = selected ? Blend(palette.Surface, palette.Border, 0.35f) : pointed ? Blend(palette.Border, palette.Accent, 0.5f) : Blend(palette.Surface, palette.Border, 0.6f);
-                if (namesOnly)
+                if (projectNamesMode)
                 {
                     ThemeDrawing.Fill(g, tile.Bounds, S(6), selected ? palette.Surface : pointed ? palette.Hover : Blend(palette.Surface, palette.Card, 0.5f));
                     if (pointed) ThemeDrawing.Stroke(g, tile.Bounds, S(6), Blend(palette.Hover, palette.Accent, 0.45f), 1);
@@ -1122,7 +1123,7 @@ namespace PeekJet
         {
             if (minimizeButton.IsEmpty) return;
             bool pointed = SelectionEnabled && hoveredControl == 2;
-            if (namesOnly)
+            if (projectNamesMode)
             {
                 if (pointed) ThemeDrawing.Fill(g, minimizeButton, S(6), palette.Hover);
                 int y = minimizeButton.Top + minimizeButton.Height / 2;
@@ -1163,19 +1164,19 @@ namespace PeekJet
             }
             menu.Items.Add(themes);
             var modes = new ToolStripMenuItem("显示模式");
-            var previews = new ToolStripMenuItem("实时预览") { Checked = !namesOnly };
-            previews.Click += delegate { SelectNamesOnly(false); };
-            var names = new ToolStripMenuItem("仅项目名称") { Checked = namesOnly };
-            names.Click += delegate { SelectNamesOnly(true); };
+            var previews = new ToolStripMenuItem("实时预览") { Checked = !projectNamesMode };
+            previews.Click += delegate { SelectProjectNamesMode(false); };
+            var names = new ToolStripMenuItem("项目名称模式") { Checked = projectNamesMode };
+            names.Click += delegate { SelectProjectNamesMode(true); };
             modes.DropDownItems.Add(previews); modes.DropDownItems.Add(names);
             menu.Items.Add(modes);
-            var sizes = new ToolStripMenuItem(namesOnly ? "标签宽度" : "预览大小");
+            var sizes = new ToolStripMenuItem(projectNamesMode ? "标签宽度" : "预览大小");
             int[] values = { 80, 100, 120, 160 };
-            string[] labels = namesOnly ? new[] { "窄", "紧凑（默认）", "标准", "宽" } : new[] { "极小", "迷你（默认）", "小", "中" };
+            string[] labels = projectNamesMode ? new[] { "窄", "紧凑（默认）", "标准", "宽" } : new[] { "极小", "迷你（默认）", "小", "中" };
             for (int i = 0; i < values.Length; i++)
             {
                 int value = values[i];
-                var item = new ToolStripMenuItem(labels[i]) { Checked = namesOnly ? preferredNameWidth == value + 20 : preferredWidth == value };
+                var item = new ToolStripMenuItem(labels[i]) { Checked = projectNamesMode ? preferredNameWidth == value + 20 : preferredWidth == value };
                 item.Click += delegate { SelectPreviewSize(value); };
                 sizes.DropDownItems.Add(item);
             }

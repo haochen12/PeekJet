@@ -20,7 +20,7 @@
 - **Click-through and gradual activation**: idle translucency lets mouse actions reach the window underneath. Hover steadily to brighten and select; default 150ms, customizable from 50 to 2000ms.
 - **Multiple monitors and four-edge docking**: follow the current VS Code window or pin a monitor, with dragging, cross-monitor movement and different display scales.
 - **Live workspace previews**: supports VS Code / Insiders and project-name labels. The current editor is subdued; click another preview to switch or restore its window.
-- **Project names only**: switch to compact labels from the context menu, with four-edge docking and all themes.
+- **Project names mode**: switch to compact labels from the context menu, with four-edge docking and all themes.
 - **Automatic visibility**: stays visible when switching between multiple windows and hides when zero or one remains.
 - **Personalization**: four themes plus system appearance, adjustable preview sizes and saved preferences.
 
@@ -41,6 +41,22 @@ Requires **Windows 10/11 and .NET Framework 4.8**. No VS Code extension needed.
 | Far-right button | Minimize all VS Code windows |
 | Right-click the tray / activated dock | Choose theme, size, monitor and activation delay, or quit |
 | `Ctrl + Alt + V` / tray click | Show, hide or recall the dock |
+
+## Display modes
+
+PeekJet provides two display modes. Switch between them from **显示模式** in the context menu.
+
+### Live preview mode
+
+Shows live VS Code thumbnails with project names. The current window is subdued; click another preview to switch or restore a window.
+
+![Live preview mode in the Ember theme](docs/themes/ember.png)
+
+### Project names mode
+
+When thumbnails are unnecessary, use a compact project label bar: horizontal on the top or bottom edge and vertical on the left or right edge. The current project is dimmed, hover brightens a label, and clicking a name switches windows. This mode creates no DWM thumbnails; label width is adjusted separately and saved automatically.
+
+![Project names mode in the Ember theme](docs/names/ember.png)
 
 <details>
 <summary>Theme preview</summary>
