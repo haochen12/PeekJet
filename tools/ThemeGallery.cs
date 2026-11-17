@@ -11,7 +11,7 @@ namespace PeekJet
     // are used in the public documentation gallery.
     internal static class ThemeGallery
     {
-        internal static int Run(string output)
+        internal static int Run(string output, bool namesOnly = false)
         {
             var sources = new List<Form>();
             var images = new List<Bitmap>();
@@ -33,6 +33,7 @@ namespace PeekJet
                     dock.Show(); Application.DoEvents();
                     dock.SelectDisplay(Screen.PrimaryScreen.DeviceName);
                     dock.SelectPreviewSize(160);
+                    if (namesOnly) { dock.SelectPreviewSize(120); dock.SelectNamesOnly(true); }
                     dock.SelectEdge(DockEdge.Top);
                     dock.RefreshWindows(sources.Select(f => new CodeWindow { Handle = f.Handle, Title = f.Text }).ToList(), sources[0].Handle);
                     Application.DoEvents();
@@ -67,6 +68,15 @@ namespace PeekJet
                                     }
                             }
                             screenshot.Save(Path.Combine(output, theme.Id + ".png"));
+                        }
+                    }
+                    if (namesOnly)
+                    {
+                        dock.SelectTheme("ember"); dock.SelectEdge(DockEdge.Left);
+                        using (var screenshot = new Bitmap(dock.Width, dock.Height))
+                        {
+                            dock.DrawToBitmap(screenshot, new Rectangle(Point.Empty, dock.Size));
+                            screenshot.Save(Path.Combine(output, "vertical.png"));
                         }
                     }
                 }

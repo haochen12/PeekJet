@@ -20,7 +20,9 @@ namespace PeekJet
             {
                 results.Add("INFO: Process architecture " + (IntPtr.Size * 8) + "-bit");
                 TestFirstMenuOpening(results);
+                TestModeMenu(results);
                 TestEdges(results);
+                TestNamesOnly(results);
                 for (int i = 0; i < 11; i++)
                 {
                     var source = new Form { Text = "Minimize test " + i, ShowInTaskbar = false };
@@ -84,6 +86,62 @@ namespace PeekJet
             }
         }
 
+        private static void TestNamesOnly(List<string> results)
+        {
+            var sources = new List<Form>();
+            try
+            {
+                for (int i = 0; i < 11; i++)
+                {
+                    var source = new Form { Text = "file.cs - project-" + i + " - Visual Studio Code", ShowInTaskbar = false };
+                    source.Show(); sources.Add(source);
+                }
+                using (var dock = new PreviewDock(null, true))
+                {
+                    dock.Show(); dock.SelectDisplay(Screen.PrimaryScreen.DeviceName);
+                    var windows = sources.Select(f => new CodeWindow { Handle = f.Handle, Title = f.Text }).ToList();
+                    dock.RefreshWindows(windows, sources[0].Handle);
+                    int previewHeight = dock.Height;
+                    var oldTiles = dock.Tiles.ToArray();
+                    dock.SelectNamesOnly(true);
+                    Check(dock.NamesOnly && dock.Height < previewHeight && oldTiles.All(t => t.Thumbnail == IntPtr.Zero),
+                        "Names mode reduces height and releases existing DWM thumbnails", results);
+                    foreach (var screen in Screen.AllScreens)
+                    {
+                        dock.SelectDisplay(screen.DeviceName);
+                        foreach (DockEdge edge in Enum.GetValues(typeof(DockEdge)))
+                        {
+                            dock.SelectEdge(edge);
+                            Check(screen.WorkingArea.Contains(dock.Bounds) && dock.Tiles.Count <= 10 && dock.Tiles.All(t => t.Preview.IsEmpty && t.Thumbnail == IntPtr.Zero && dock.ClientRectangle.Contains(t.Bounds)),
+                                "Names mode fits screen without preview resources: " + screen.DeviceName + " " + edge, results);
+                            var flags = System.Reflection.BindingFlags.Instance | System.Reflection.BindingFlags.NonPublic;
+                            var controls = new[] { "minimizeButton", "previousButton", "nextButton" }.Select(n => (Rectangle)typeof(PreviewDock).GetField(n, flags).GetValue(dock)).Where(r => !r.IsEmpty).ToArray();
+                            Check(controls.All(r => dock.ClientRectangle.Contains(r) && dock.Tiles.All(t => !r.IntersectsWith(t.Bounds))), "Names mode controls fit outside project labels: " + edge, results);
+                            dock.ChangePage(1);
+                            Check(dock.Tiles.Last().Window.Handle == sources[10].Handle && dock.Tiles.All(t => t.Thumbnail == IntPtr.Zero), "Names mode pages reach the eleventh project: " + edge, results);
+                            dock.ChangePage(-1);
+                        }
+                    }
+                    foreach (var theme in ThemeCatalog.All)
+                    {
+                        dock.SelectTheme(theme.Id);
+                        using (var image = new Bitmap(dock.Width, dock.Height)) dock.DrawToBitmap(image, dock.ClientRectangle);
+                    }
+                    dock.SelectEdge(DockEdge.Top);
+                    dock.SelectNamesOnly(false);
+                    Check(!dock.NamesOnly && dock.Tiles.All(t => !t.Preview.IsEmpty && t.Thumbnail != IntPtr.Zero), "Switching back restores real previews", results);
+                    dock.SelectNamesOnly(true);
+                    dock.RefreshWindows(windows, sources[1].Handle);
+                    var point = dock.PointToScreen(new Point(dock.Tiles[1].Bounds.Left + 10, dock.Tiles[1].Bounds.Top + 10));
+                    dock.UpdatePointer(point, false, 0); dock.UpdatePointer(point, false, 150);
+                    Check(dock.SelectionEnabled && dock.Tiles.All(t => t.Thumbnail == IntPtr.Zero), "Names mode keeps hover activation without recreating thumbnails", results);
+                    dock.MinimizeAllWindows(); Pump();
+                    Check(sources.All(f => Native.IsIconic(f.Handle)), "Names mode minimizes all projects across pages", results);
+                }
+            }
+            finally { foreach (var source in sources) source.Dispose(); }
+        }
+
         private static void TestFirstMenuOpening(List<string> results)
         {
             using (var dock = new PreviewDock(null, true))
@@ -100,6 +158,23 @@ namespace PeekJet
                         "Tray context menu can open on attempt " + attempt, results);
                     menu.Close();
                 }
+            }
+        }
+
+        private static void TestModeMenu(List<string> results)
+        {
+            using (var dock = new PreviewDock(null, true))
+            {
+                var flags = System.Reflection.BindingFlags.Instance | System.Reflection.BindingFlags.NonPublic;
+                var menu = (ContextMenuStrip)typeof(PreviewDock).GetField("menu", flags).GetValue(dock);
+                var build = typeof(PreviewDock).GetMethod("BuildMenu", flags);
+                build.Invoke(dock, null);
+                var normal = menu.Items.OfType<ToolStripMenuItem>().Select(i => i.Text).ToList();
+                Check(normal.Contains("预览大小") && !normal.Contains("标签宽度"), "Preview mode menu shows preview sizing only", results);
+                dock.SelectNamesOnly(true);
+                build.Invoke(dock, null);
+                var names = menu.Items.OfType<ToolStripMenuItem>().Select(i => i.Text).ToList();
+                Check(names.Contains("标签宽度") && !names.Contains("预览大小"), "Names-only menu shows label sizing only", results);
             }
         }
 
@@ -266,6 +341,7 @@ namespace PeekJet
                 if (avoidanceStateOnly)
                 {
                     TestAvoidance(results, false);
+                    TestAvoidance(results, false, true);
                     File.WriteAllText(log, string.Join(Environment.NewLine, results), Encoding.UTF8);
                     return 0;
                 }
@@ -492,10 +568,9 @@ namespace PeekJet
                         {
                             dock.SelectEdge(edge); Application.DoEvents();
                             var area = screen.WorkingArea;
-                            int inset;
-                            using (var graphics = dock.CreateGraphics()) inset = (int)Math.Round(6 * graphics.DpiX / 96f);
+                            const int inset = 0;
                             bool vertical = edge == DockEdge.Left || edge == DockEdge.Right;
-                            bool aligned = edge == DockEdge.Top ? dock.Top == area.Top + inset : edge == DockEdge.Bottom ? dock.Bottom == area.Bottom - inset : edge == DockEdge.Left ? dock.Left == area.Left + inset : dock.Right == area.Right - inset;
+                            bool aligned = edge == DockEdge.Top ? dock.Top == area.Top : edge == DockEdge.Bottom ? dock.Bottom == area.Bottom : edge == DockEdge.Left ? dock.Left == area.Left : dock.Right == area.Right;
                             bool centered = vertical ? Math.Abs(dock.Top + dock.Height / 2 - (area.Top + area.Height / 2)) <= 1 : Math.Abs(dock.Left + dock.Width / 2 - (area.Left + area.Width / 2)) <= 1;
                             bool ordered = true;
                             for (int i = 1; i < dock.Tiles.Count; i++)
@@ -577,7 +652,7 @@ namespace PeekJet
                 Check(area.Contains(dock.Bounds) && Math.Abs(area.Bottom - dock.Bottom) <= 12 && !dock.Capture, "Native mouse drag moves and docks without a selection click (bounds=" + dock.Bounds + ", cursor=" + Cursor.Position + ")", results);
             }
         }
-        private static void TestAvoidance(List<string> results, bool realKeyboardInput = true)
+        private static void TestAvoidance(List<string> results, bool realKeyboardInput = true, bool namesOnly = false)
         {
             var screen = Screen.PrimaryScreen;
             var area = screen.WorkingArea;
@@ -592,6 +667,7 @@ namespace PeekJet
                 };
                 dock.SelectDisplay(screen.DeviceName); dock.SelectEdge(DockEdge.Bottom);
                 dock.RefreshWindows(sources, editor.Handle); Application.DoEvents();
+                if (namesOnly) { dock.SelectNamesOnly(true); results.Add("INFO: Checking typing avoidance in names-only mode"); }
                 dock.AdvanceTypingAvoidance(0, editor.Handle);
                 Check(Math.Abs(area.Bottom - dock.Bottom) <= 12, "Bottom docking stays selected while VS Code is in foreground", results);
                 dock.AdvanceTypingAvoidance(1, IntPtr.Zero);

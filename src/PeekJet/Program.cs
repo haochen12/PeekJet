@@ -26,6 +26,7 @@ namespace PeekJet
             if (args.Contains("--self-test-themes")) { Environment.Exit(SelfTest.RunThemes()); return; }
             if (args.Contains("--self-test-controls")) { Environment.Exit(SelfTest.RunControls()); return; }
             if (args.Contains("--render-themes")) { Environment.Exit(ThemeGallery.Run(Path.GetFullPath(Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "..", "docs", "themes")))); return; }
+            if (args.Contains("--render-names")) { Environment.Exit(ThemeGallery.Run(Path.GetFullPath(Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "..", "docs", "names")), true)); return; }
             bool created;
             using (var mutex = new Mutex(true, "Local\\PeekJet.Singleton", out created))
             using (var wake = new EventWaitHandle(false, EventResetMode.AutoReset, "Local\\PeekJet.Show"))
@@ -225,6 +226,7 @@ namespace PeekJet
         internal readonly List<PreviewTile> Tiles = new List<PreviewTile>();
         private List<CodeWindow> windows = new List<CodeWindow>();
         private readonly Font titleFont = new Font("Microsoft YaHei UI", 8f);
+        private readonly Font nameFont = new Font("Segoe UI", 8.5f);
         private readonly Font brandFont = new Font("Segoe UI", 7f, FontStyle.Regular);
         private readonly Font iconFont = new Font("Segoe MDL2 Assets", 9f);
         private readonly Font menuFont = new Font("Microsoft YaHei UI", 9f);
@@ -235,6 +237,9 @@ namespace PeekJet
         private int hoverDelayMilliseconds = 150;
         internal int HoverDelayMilliseconds { get { return hoverDelayMilliseconds; } }
         private int hovered = -1, page, capacity = 4, preferredWidth = 100;
+        private bool namesOnly;
+        private int preferredNameWidth = 120;
+        internal bool NamesOnly { get { return namesOnly; } }
         private DockEdge dockEdge = DockEdge.Top;
         private bool manuallyHidden, hotkeyRegistered, disposing, arranging, arrangeAgain;
         private bool followActive = true;
@@ -353,6 +358,8 @@ namespace PeekJet
                     if (ThemeCatalog.Valid(savedTheme)) themeId = savedTheme;
                     int savedDelay = Convert.ToInt32(key.GetValue("HoverDelayMilliseconds", 150));
                     if (savedDelay >= 50 && savedDelay <= 2000) hoverDelayMilliseconds = savedDelay;
+                    namesOnly = Convert.ToString(key.GetValue("DisplayMode", "Preview")) == "NamesOnly";
+                    preferredNameWidth = Math.Max(100, Math.Min(440, Convert.ToInt32(key.GetValue("NameWidth", 120))));
                 }
             }
             catch (Exception e) { Program.Log(e); }
@@ -372,6 +379,8 @@ namespace PeekJet
                     key.SetValue("AvoidWhileTyping", avoidWhileTyping ? 1 : 0);
                     key.SetValue("Theme", themeId);
                     key.SetValue("HoverDelayMilliseconds", hoverDelayMilliseconds);
+                    key.SetValue("DisplayMode", namesOnly ? "NamesOnly" : "Preview");
+                    key.SetValue("NameWidth", preferredNameWidth);
                 }
             }
             catch (Exception e) { Program.Log(e); }
@@ -406,9 +415,23 @@ namespace PeekJet
         }
         internal void SelectPreviewSize(int width)
         {
-            preferredWidth = Math.Max(80, Math.Min(420, width));
+            if (namesOnly) preferredNameWidth = Math.Max(100, Math.Min(440, width + 20));
+            else preferredWidth = Math.Max(80, Math.Min(420, width));
             if (!testing) SaveSettings();
             Arrange();
+        }
+        internal void SelectNamesOnly(bool enabled)
+        {
+            if (namesOnly == enabled) return;
+            namesOnly = enabled;
+            hovered = hoveredControl = -1;
+            tooltip.Hide(this);
+            ResetInteraction();
+            // Release DWM resources even if the dock currently has too few windows to arrange.
+            foreach (var tile in Tiles) tile.Dispose();
+            if (!testing) SaveSettings();
+            Arrange();
+            Invalidate();
         }
         internal void SelectHoverDelay(int milliseconds)
         {
@@ -588,11 +611,22 @@ namespace PeekJet
             int margin = S(8), gap = S(6), width = S(preferredWidth);
             int headerHeight = S(12), footerHeight = S(10);
             int contentLeft = margin + S(18), contentRight = margin + S(34);
+            if (namesOnly)
+            {
+                width = S(preferredNameWidth);
+                headerHeight = vertical ? S(28) : S(6);
+                footerHeight = vertical ? S(38) : S(6);
+                gap = S(4);
+                contentLeft = vertical ? margin : S(72);
+                contentRight = vertical ? margin : S(42);
+            }
             int usable = Math.Max(S(160), area.Width - S(32));
             width = Math.Min(width, usable - contentLeft - contentRight);
             width = Math.Min(width, Math.Max(S(60), (int)((area.Height - S(20) - headerHeight - footerHeight - S(22)) * 16.0 / 9.0)));
             int previewHeight = (int)(width * 9.0 / 16.0);
-            int tileHeight = previewHeight + S(22);
+            int tileHeight = namesOnly ? S(24) : previewHeight + S(22);
+            if (namesOnly && !vertical && windows.Count > Math.Min(10, Math.Max(1, (usable - contentLeft - contentRight + gap) / (width + gap))))
+                contentRight = S(94);
             capacity = vertical ? Math.Max(1, Math.Min(10, (area.Height - S(20) - headerHeight - footerHeight + gap) / (tileHeight + gap))) :
                 Math.Max(1, Math.Min(10, (usable - contentLeft - contentRight + gap) / (width + gap)));
             int maxPage = Math.Max(0, (windows.Count - 1) / capacity);
@@ -605,6 +639,15 @@ namespace PeekJet
             previousButton = !hasPages ? Rectangle.Empty : new Rectangle(controlX + S(2), controlY - S(22), S(22), S(20));
             nextButton = !hasPages ? Rectangle.Empty : new Rectangle(controlX + S(2), controlY + S(28), S(22), S(20));
             minimizeButton = new Rectangle(controlX, controlY, S(26), S(26));
+            if (namesOnly)
+            {
+                // Short docks need horizontal paging controls; a vertical control stack would clip.
+                int buttonY = vertical ? ClientSize.Height - S(32) : (ClientSize.Height - S(26)) / 2;
+                int buttonX = vertical ? (ClientSize.Width - S(26)) / 2 : ClientSize.Width - S(34);
+                minimizeButton = new Rectangle(buttonX, buttonY, S(26), S(26));
+                previousButton = !hasPages ? Rectangle.Empty : new Rectangle(vertical ? buttonX - S(28) : buttonX - S(52), buttonY, S(24), S(26));
+                nextButton = !hasPages ? Rectangle.Empty : new Rectangle(vertical ? buttonX + S(30) : buttonX - S(26), buttonY, S(24), S(26));
+            }
             for (int i = 0; i < count; i++)
             {
                 var window = windows[page * capacity + i];
@@ -613,7 +656,7 @@ namespace PeekJet
                 else tile = new PreviewTile();
                 tile.Window = window;
                 tile.Bounds = new Rectangle(vertical ? contentLeft : contentLeft + i * (width + gap), vertical ? headerHeight + i * (tileHeight + gap) : headerHeight, width, tileHeight);
-                tile.Preview = new Rectangle(tile.Bounds.X + S(3), tile.Bounds.Y + S(3), width - S(6), previewHeight - S(6));
+                tile.Preview = namesOnly ? Rectangle.Empty : new Rectangle(tile.Bounds.X + S(3), tile.Bounds.Y + S(3), width - S(6), previewHeight - S(6));
                 Tiles.Add(tile);
                 UpdateThumbnail(tile);
             }
@@ -625,20 +668,20 @@ namespace PeekJet
         {
             if (dragPending) return;
             var area = TargetScreen().WorkingArea;
-            int inset = S(6);
             int centerX = area.Left + (area.Width - Width) / 2, centerY = area.Top + (area.Height - Height) / 2;
             Point point;
             switch (dockEdge)
             {
-                case DockEdge.Bottom: point = new Point(centerX, area.Bottom - Height - inset); break;
-                case DockEdge.Left: point = new Point(area.Left + inset, centerY); break;
-                case DockEdge.Right: point = new Point(area.Right - Width - inset, centerY); break;
-                default: point = new Point(centerX, area.Top + inset); break;
+                case DockEdge.Bottom: point = new Point(centerX, area.Bottom - Height); break;
+                case DockEdge.Left: point = new Point(area.Left, centerY); break;
+                case DockEdge.Right: point = new Point(area.Right - Width, centerY); break;
+                default: point = new Point(centerX, area.Top); break;
             }
             if (Location != point) Location = point;
         }
         private void UpdateThumbnail(PreviewTile tile, bool querySource = true)
         {
+            if (namesOnly) return;
             if (tile.Thumbnail == IntPtr.Zero)
             {
                 IntPtr thumbnail;
@@ -973,14 +1016,27 @@ namespace PeekJet
             if (palette == null) return;
             g.Clear(palette.Surface);
             ThemeDrawing.Stroke(g, ClientRectangle, CornerRadius, palette.Border, 1);
-            var brandState = g.Save();
-            g.TranslateTransform(S(13), Height / 2f);
-            g.RotateTransform(90);
-            g.TextRenderingHint = System.Drawing.Text.TextRenderingHint.AntiAliasGridFit;
-            using (var brush = new SolidBrush(Blend(palette.Surface, palette.Muted, 0.78f)))
-            using (var format = new StringFormat { Alignment = StringAlignment.Center, LineAlignment = StringAlignment.Center })
-                g.DrawString("P E E K J E T", brandFont, brush, new RectangleF(-Height / 2f, -S(10), Height, S(20)), format);
-            g.Restore(brandState);
+            bool namesVertical = namesOnly && (dockEdge == DockEdge.Left || dockEdge == DockEdge.Right);
+            if (namesOnly)
+            {
+                var brandBounds = namesVertical ? new Rectangle(0, 0, Width, S(28)) : new Rectangle(S(8), 0, S(54), Height);
+                TextRenderer.DrawText(g, "PeekJet", brandFont, brandBounds, Blend(palette.Surface, palette.Muted, 0.78f),
+                    TextFormatFlags.HorizontalCenter | TextFormatFlags.VerticalCenter | TextFormatFlags.SingleLine | TextFormatFlags.NoPadding);
+            }
+            else
+            {
+                var brandState = g.Save();
+                g.TranslateTransform(S(13), Height / 2f);
+                g.RotateTransform(90);
+                g.TextRenderingHint = System.Drawing.Text.TextRenderingHint.AntiAliasGridFit;
+                using (var brush = new SolidBrush(Blend(palette.Surface, palette.Muted, 0.78f)))
+                using (var format = new StringFormat { Alignment = StringAlignment.Center, LineAlignment = StringAlignment.Center })
+                    g.DrawString("P E E K J E T", brandFont, brush, new RectangleF(-Height / 2f, -S(10), Height, S(20)), format);
+                g.Restore(brandState);
+            }
+            if (namesOnly && !namesVertical)
+                using (var pen = new Pen(Blend(palette.Surface, palette.Border, 0.65f)))
+                    g.DrawLine(pen, S(65), S(12), S(65), Height - S(12));
             DrawMinimizeButton(g);
             if (SelectionEnabled)
             {
@@ -993,6 +1049,16 @@ namespace PeekJet
                 bool selected = tile.Window.Handle == active;
                 bool pointed = !selected && SelectionEnabled && i == hovered;
                 Color edge = selected ? Blend(palette.Surface, palette.Border, 0.35f) : pointed ? Blend(palette.Border, palette.Accent, 0.5f) : Blend(palette.Surface, palette.Border, 0.6f);
+                if (namesOnly)
+                {
+                    ThemeDrawing.Fill(g, tile.Bounds, S(6), selected ? palette.Surface : pointed ? palette.Hover : Blend(palette.Surface, palette.Card, 0.5f));
+                    if (pointed) ThemeDrawing.Stroke(g, tile.Bounds, S(6), Blend(palette.Hover, palette.Accent, 0.45f), 1);
+                    var nameBounds = Rectangle.Inflate(tile.Bounds, -S(10), 0);
+                    TextRenderer.DrawText(g, tile.Window.ProjectName, nameFont, nameBounds,
+                        selected ? Blend(palette.Surface, palette.Muted, 0.78f) : palette.Text,
+                        TextFormatFlags.EndEllipsis | TextFormatFlags.VerticalCenter | TextFormatFlags.HorizontalCenter | TextFormatFlags.SingleLine | TextFormatFlags.NoPrefix | TextFormatFlags.NoPadding);
+                    continue;
+                }
                 ThemeDrawing.Fill(g, tile.Bounds, S(8), selected ? Blend(palette.Surface, palette.Card, 0.35f) : pointed ? Blend(palette.Card, palette.Hover, 0.6f) : palette.Card);
                 ThemeDrawing.Fill(g, tile.Preview, S(5), selected ? Blend(palette.Preview, palette.Surface, 0.4f) : palette.Preview);
                 ThemeDrawing.Stroke(g, tile.Bounds, S(8), edge, 1);
@@ -1057,6 +1123,17 @@ namespace PeekJet
         {
             if (minimizeButton.IsEmpty) return;
             bool pointed = SelectionEnabled && hoveredControl == 2;
+            if (namesOnly)
+            {
+                if (pointed) ThemeDrawing.Fill(g, minimizeButton, S(6), palette.Hover);
+                int y = minimizeButton.Top + minimizeButton.Height / 2;
+                using (var pen = new Pen(pointed ? palette.Accent : palette.Muted, Math.Max(1, S(1))))
+                {
+                    pen.StartCap = pen.EndCap = LineCap.Round;
+                    g.DrawLine(pen, minimizeButton.Left + S(9), y, minimizeButton.Right - S(9), y);
+                }
+                return;
+            }
             ThemeDrawing.Fill(g, minimizeButton, S(8), pointed ? palette.Hover : Blend(palette.Surface, palette.Card, 0.3f));
             ThemeDrawing.Stroke(g, minimizeButton, S(8), Blend(palette.Surface, pointed ? palette.Accent : palette.Border, pointed ? 0.6f : 0.25f), 1);
             TextRenderer.DrawText(g, "\uE921", iconFont, minimizeButton, pointed ? palette.Accent : Blend(palette.Surface, palette.Muted, 0.65f),
@@ -1086,13 +1163,20 @@ namespace PeekJet
                 themes.DropDownItems.Add(item);
             }
             menu.Items.Add(themes);
-            var sizes = new ToolStripMenuItem("预览大小");
+            var modes = new ToolStripMenuItem("显示模式");
+            var previews = new ToolStripMenuItem("实时预览") { Checked = !namesOnly };
+            previews.Click += delegate { SelectNamesOnly(false); };
+            var names = new ToolStripMenuItem("仅项目名称") { Checked = namesOnly };
+            names.Click += delegate { SelectNamesOnly(true); };
+            modes.DropDownItems.Add(previews); modes.DropDownItems.Add(names);
+            menu.Items.Add(modes);
+            var sizes = new ToolStripMenuItem(namesOnly ? "标签宽度" : "预览大小");
             int[] values = { 80, 100, 120, 160 };
-            string[] labels = { "极小", "迷你（默认）", "小", "中" };
+            string[] labels = namesOnly ? new[] { "窄", "紧凑（默认）", "标准", "宽" } : new[] { "极小", "迷你（默认）", "小", "中" };
             for (int i = 0; i < values.Length; i++)
             {
                 int value = values[i];
-                var item = new ToolStripMenuItem(labels[i]) { Checked = preferredWidth == value };
+                var item = new ToolStripMenuItem(labels[i]) { Checked = namesOnly ? preferredNameWidth == value + 20 : preferredWidth == value };
                 item.Click += delegate { SelectPreviewSize(value); };
                 sizes.DropDownItems.Add(item);
             }
@@ -1174,7 +1258,7 @@ namespace PeekJet
                 if (IsHandleCreated && hotkeyRegistered) Native.UnregisterHotKey(Handle, 1);
                 foreach (var tile in Tiles) tile.Dispose();
                 tray.Visible = false; tray.Dispose(); menu.Dispose(); tooltip.Dispose();
-                titleFont.Dispose(); brandFont.Dispose(); appIcon.Dispose(); trayIcon.Dispose();
+                titleFont.Dispose(); nameFont.Dispose(); brandFont.Dispose(); appIcon.Dispose(); trayIcon.Dispose();
                 iconFont.Dispose(); menuFont.Dispose();
             }
             base.Dispose(managed);

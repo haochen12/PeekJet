@@ -20,6 +20,7 @@
 - **Click-through and gradual activation**: idle translucency lets mouse actions reach the window underneath. Hover steadily to brighten and select; default 150ms, customizable from 50 to 2000ms.
 - **Multiple monitors and four-edge docking**: follow the current VS Code window or pin a monitor, with dragging, cross-monitor movement and different display scales.
 - **Live workspace previews**: supports VS Code / Insiders and project-name labels. The current editor is subdued; click another preview to switch or restore its window.
+- **Project names only**: switch to compact labels from the context menu, with four-edge docking and all themes.
 - **Automatic visibility**: stays visible when switching between multiple windows and hides when zero or one remains.
 - **Personalization**: four themes plus system appearance, adjustable preview sizes and saved preferences.
 

@@ -1,5 +1,9 @@
 # Changelog
 
+## Unreleased
+
+- Add a saved project-names-only display mode with compact horizontal labels, vertical lists, theme support and no DWM thumbnail resources.
+
 ## 0.2.2 — 2026-11-14
 
 - Fix the first tray right-click being cancelled while the context menu is populated dynamically.
