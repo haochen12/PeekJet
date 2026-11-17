@@ -736,7 +736,7 @@ namespace PeekJet
             keyboardCallback = delegate(int code, IntPtr message, IntPtr data)
             {
                 // Only retain the event time and target window. Never inspect key codes or text,
-                // and always forward input unchanged. All rendering happens on the timer.
+                // and always forward input unchanged. Any foreground app can trigger hiding.
                 if (code >= 0 && (message.ToInt64() == 0x100 || message.ToInt64() == 0x104))
                     RecordKeyboardActivity(Native.GetForegroundWindow(), MonotonicMilliseconds());
                 return Native.CallNextHookEx(keyboardHook, code, message, data);
@@ -747,7 +747,7 @@ namespace PeekJet
         }
         internal void RecordKeyboardActivity(IntPtr foreground, long milliseconds)
         {
-            if (!avoidWhileTyping || !Visible || menu.Visible || !windows.Any(w => w.Handle == foreground)) return;
+            if (!avoidWhileTyping || !Visible || menu.Visible || foreground == Handle) return;
             typingWindow = foreground;
             lastTypingAt = milliseconds;
             pointerTimer.Interval = 16;
@@ -760,8 +760,7 @@ namespace PeekJet
         internal void AdvanceTypingAvoidance(long milliseconds, IntPtr foreground)
         {
             long elapsed = milliseconds - lastTypingAt;
-            bool avoiding = avoidWhileTyping && Visible && !menu.Visible && !dragPending && elapsed >= 0 && elapsed < 1200 && foreground == typingWindow &&
-                windows.Any(w => w.Handle == foreground) && OverlapsWindow(foreground);
+            bool avoiding = avoidWhileTyping && Visible && !menu.Visible && !dragPending && elapsed >= 0 && elapsed < 1200;
             if (avoiding != TypingAvoidanceActive)
             {
                 TypingAvoidanceActive = avoiding;
@@ -1224,7 +1223,7 @@ namespace PeekJet
                 displays.DropDownItems.Add(item);
             }
             menu.Items.Add(displays);
-            var avoidance = new ToolStripMenuItem("输入时自动避让（推荐）") { Checked = avoidWhileTyping };
+            var avoidance = new ToolStripMenuItem("输入时自动隐藏（推荐）") { Checked = avoidWhileTyping };
             avoidance.Click += delegate { avoidWhileTyping = !avoidWhileTyping; ClearTypingAvoidance(); if (!testing) SaveSettings(); };
             menu.Items.Add(avoidance);
             menu.Items.Add("刷新窗口", null, delegate { RefreshWindows(); Arrange(); });

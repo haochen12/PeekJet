@@ -14,7 +14,7 @@ Right-click the tray or the activated dock. Changes apply immediately and persis
 | 悬停激活时间 | Default 150ms; presets or custom 50–2000ms |
 | 停靠边缘 | Top by default; four edges and drag-to-snap |
 | 显示位置 | Follow the current VS Code window or pin a monitor |
-| 输入时自动避让 | Enabled by default; can be disabled |
+| 输入时自动隐藏 | Hides on keyboard input in any foreground app; enabled by default |
 
 Dragging across monitors pins the destination; automatic following can be restored in the menu. Each page has up to 10 previews, fewer when screen space is limited. The current editor preview is subdued. Clicking another preview switches windows and restores minimized editors.
 
@@ -26,7 +26,7 @@ Choose **显示模式 → 仅项目名称** for horizontal labels at the top/bot
 
 - The dock stays visible when switching between multiple windows; it hides with zero or one.
 - `Ctrl + Alt + V` or a tray click shows, hides or recalls the dock.
-- Typing in an overlapping VS Code window makes the dock transparent and click-through. It recovers in place after about 1.2 seconds without typing.
+- Keyboard input in any foreground app hides the dock. It fades back in place after about 1.2 seconds without typing.
 - The far-right button minimizes all tracked VS Code windows across pages; the dock remains available to restore them.
 
 ## FAQ

@@ -16,7 +16,7 @@
 
 ## Features
 
-- **Typing avoidance**: when typing in an overlapping VS Code window, the dock becomes transparent and click-through. It recovers in place after about 1.2 seconds without typing, keeping editors and terminals clear. Enabled by default; optional in the menu.
+- **Global typing hide**: keyboard input in any foreground app hides the dock. It fades back in place after about 1.2 seconds without typing, keeping editors, terminals and other input surfaces clear. Enabled by default; optional in the menu.
 - **Click-through and gradual activation**: idle translucency lets mouse actions reach the window underneath. Hover steadily to brighten and select; default 150ms, customizable from 50 to 2000ms.
 - **Multiple monitors and four-edge docking**: follow the current VS Code window or pin a monitor, with dragging, cross-monitor movement and different display scales.
 - **Live workspace previews**: supports VS Code / Insiders and project-name labels. The current editor is subdued; click another preview to switch or restore its window.

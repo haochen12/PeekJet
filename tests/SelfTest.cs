@@ -690,6 +690,11 @@ namespace PeekJet
                 dock.RecordKeyboardActivity(editor.Handle, 3000); dock.AdvanceTypingAvoidance(3000, editor.Handle);
                 dock.Toggle();
                 Check(dock.Visible && !dock.TypingAvoidanceActive && dock.Opacity > 0, "Tray or hotkey can immediately recall an avoided dock", results);
+                dock.ClearTypingAvoidance();
+                dock.RecordKeyboardActivity(other.Handle, 4000);
+                dock.AdvanceTypingAvoidance(4000, other.Handle);
+                Check(dock.TypingAvoidanceActive && dock.Opacity == 0, "Keyboard input in an unrelated foreground app also hides the dock", results);
+                dock.ClearTypingAvoidance();
                 Check(dock.StartTypingMonitor(), "Native keyboard activity monitor installs successfully", results);
                 if (!realKeyboardInput)
                 {

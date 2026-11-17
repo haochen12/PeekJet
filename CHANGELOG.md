@@ -1,8 +1,9 @@
 # Changelog
 
-## Unreleased
+## 0.2.3 — 2026-11-17
 
 - Add a saved project-names-only display mode with compact horizontal labels, vertical lists, theme support and no DWM thumbnail resources.
+- Hide the dock on keyboard input from any foreground application, then fade it back after the idle timeout.
 
 ## 0.2.2 — 2026-11-14
 
