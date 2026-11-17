@@ -1,5 +1,9 @@
 # Changelog
 
+## 0.2.4 — 2026-11-17
+
+- Rename and document the two display modes as Live preview mode and Project names mode, with side-by-side README examples.
+
 ## 0.2.3 — 2026-11-17
 
 - Add a saved project-names mode display mode with compact horizontal labels, vertical lists, theme support and no DWM thumbnail resources.
